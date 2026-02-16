@@ -1,0 +1,59 @@
+// ─── Tool Registry ────────────────────────────────────────────────
+// Central registry for all Talon tools. The agent loop queries this
+// to know what tools are available and how to call them.
+
+import type { TalonConfig } from '../config/schema.js';
+import type { AgentLoop } from '../agent/loop.js';
+import { registerFileTools } from './file.js';
+import { registerShellTools } from './shell.js';
+import { registerMemoryTools } from './memory-tools.js';
+import { registerWebTools } from './web.js';
+import { logger } from '../utils/logger.js';
+
+export interface ToolDefinition {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+    execute: (args: Record<string, unknown>) => Promise<string>;
+}
+
+/**
+ * Register all enabled tools with the agent loop.
+ */
+export function registerAllTools(agentLoop: AgentLoop, config: TalonConfig): void {
+    const registered: string[] = [];
+
+    // File tools
+    if (config.tools.files.enabled) {
+        const fileTools = registerFileTools(config);
+        for (const tool of fileTools) {
+            agentLoop.registerTool(tool);
+            registered.push(tool.name);
+        }
+    }
+
+    // Shell tool
+    if (config.tools.shell.enabled) {
+        const shellTools = registerShellTools(config);
+        for (const tool of shellTools) {
+            agentLoop.registerTool(tool);
+            registered.push(tool.name);
+        }
+    }
+
+    // Memory tools (always enabled — these are how the agent writes to its own files)
+    const memoryTools = registerMemoryTools(config);
+    for (const tool of memoryTools) {
+        agentLoop.registerTool(tool);
+        registered.push(tool.name);
+    }
+
+    // Web tools
+    const webTools = registerWebTools(config);
+    for (const tool of webTools) {
+        agentLoop.registerTool(tool);
+        registered.push(tool.name);
+    }
+
+    logger.info({ tools: registered, count: registered.length }, 'Tools registered');
+}
