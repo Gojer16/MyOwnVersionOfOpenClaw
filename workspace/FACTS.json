@@ -1,0 +1,20 @@
+{
+  "user": {
+    "name": "User",
+    "preferences": {
+      "editor": "VS Code",
+      "shell": "zsh",
+      "theme": "dark",
+      "language": "TypeScript"
+    }
+  },
+  "environment": {
+    "os": "darwin",
+    "project_root": "/Users/orlandoascanio/Desktop/PersonalOpenClawVersion"
+  },
+  "learned_facts": [
+    "User wants a personal version of OpenClaw focused on persona and full PC access.",
+    "User prefers using OpenRouter APIs.",
+    "User wants a proactive 'Shadow Loop' for system observation."
+  ]
+}
