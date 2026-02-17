@@ -5,6 +5,69 @@ All notable changes to Talon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-02-17
+
+### ✨ Added
+
+#### Shadow Loop (Proactive Intelligence)
+- **Filesystem Watcher**: Monitors file changes using chokidar
+- **Heuristic Engine**: Filters events through customizable rules
+- **Ghost Messenger**: Sends proactive suggestions before you ask
+- **Built-in Heuristics**:
+  - New TypeScript file detection → "Need tests?"
+  - TypeScript file changes → "Need help?"
+  - Test file updates → "Test file updated"
+- **Configuration**: Custom paths, ignore patterns, cooldown, rate limiting
+- **Gateway Integration**: Automatically starts with gateway when enabled
+- **85.8% Test Coverage**: 32 tests (16 unit + 16 integration)
+
+#### Browser Control
+- **browser_navigate**: Open URLs in browser
+- **browser_click**: Click elements by CSS selector
+- **browser_type**: Type text into input fields
+- **browser_screenshot**: Capture page screenshots (base64)
+- **browser_extract**: Extract page content (text/HTML)
+- **Puppeteer Integration**: Full browser automation
+- **Configurable**: Headless/headed mode, custom viewport
+- **35 Tests**: Full TDD implementation
+
+#### Subagent System
+- **5 Specialized Agents**: Research, Writer, Planner, Critic, Summarizer
+- **Cost Optimization**: 97% savings using gpt-4o-mini vs gpt-4o
+- **SubagentRegistry**: Manages agent instances
+- **Configurable Model**: Use any model for subagents
+- **19 Tests**: Complete TDD coverage
+
+### 🧪 Testing
+
+#### Test Infrastructure
+- **323 Total Tests**: 100% passing
+- **Test Coverage**: 
+  - Shadow Loop: 85.8%
+  - Browser Tools: 100%
+  - Subagents: 100%
+  - Core Components: 75-80%
+- **Integration Tests**: Real filesystem, gateway, error handling
+- **Vitest + Coverage**: @vitest/coverage-v8
+
+### 📚 Documentation
+- **SYSTEM_ACCESS_AUDIT.md**: Full system access analysis
+- **SHADOW_LOOP_TESTS.md**: Test coverage report
+- **COVERAGE.md**: Detailed coverage breakdown
+- **IMPLEMENTATION_STATUS.md**: Master tracker
+
+### 🔧 Fixed
+- TypeScript compilation errors in subagent files
+- Heuristic ordering (test files now match first)
+- CI/CD permissions for releases
+
+### 🎯 Full System Access Complete
+- ✅ Read files
+- ✅ Write files  
+- ✅ Run commands
+- ✅ Control browsers
+- ✅ Observe filesystem changes
+
 ## [Unreleased]
 
 ### ✨ New Features
