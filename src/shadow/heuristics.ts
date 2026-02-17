@@ -24,6 +24,15 @@ export class HeuristicEngine {
 
 export const builtInHeuristics: Heuristic[] = [
     {
+        name: 'test-file-change',
+        test: (e) => e.path.includes('.test.') || e.path.includes('.spec.'),
+        generate: (e) => ({
+            message: `Test file updated: ${e.path}`,
+            context: { path: e.path, type: 'test' },
+            priority: 'low',
+        }),
+    },
+    {
         name: 'new-typescript-file',
         test: (e) => e.type === 'add' && e.path.endsWith('.ts') && !e.path.includes('.test.'),
         generate: (e) => ({
@@ -38,15 +47,6 @@ export const builtInHeuristics: Heuristic[] = [
         generate: (e) => ({
             message: `I noticed you changed ${e.path}. Need help?`,
             context: { path: e.path, type: 'typescript' },
-            priority: 'low',
-        }),
-    },
-    {
-        name: 'test-file-change',
-        test: (e) => e.path.includes('.test.') || e.path.includes('.spec.'),
-        generate: (e) => ({
-            message: `Test file updated: ${e.path}`,
-            context: { path: e.path, type: 'test' },
             priority: 'low',
         }),
     },
