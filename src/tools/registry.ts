@@ -11,6 +11,8 @@ import { registerWebTools } from './web.js';
 import { registerBrowserTools } from './browser.js';
 import { notesTools } from './notes.js';
 import { tasksTools } from './tasks.js';
+import { appleNotesTools } from './apple-notes.js';
+import { appleRemindersTools } from './apple-reminders.js';
 import { logger } from '../utils/logger.js';
 
 export interface ToolDefinition {
@@ -71,6 +73,15 @@ export function registerAllTools(agentLoop: AgentLoop, config: TalonConfig): voi
     for (const tool of [...notesTools, ...tasksTools]) {
         agentLoop.registerTool(tool);
         registered.push(tool.name);
+    }
+
+    // Apple integrations (macOS only)
+    if (process.platform === 'darwin') {
+        for (const tool of [...appleNotesTools, ...appleRemindersTools]) {
+            agentLoop.registerTool(tool);
+            registered.push(tool.name);
+        }
+        logger.info('Apple integrations enabled (macOS detected)');
     }
 
     logger.info({ tools: registered, count: registered.length }, 'Tools registered');
