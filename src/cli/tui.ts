@@ -199,11 +199,25 @@ function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket
             break;
 
         case 'provider':
-            changeProvider().then(() => rl.prompt());
+            rl.pause();
+            changeProvider().then(() => {
+                rl.resume();
+                rl.prompt();
+            }).catch(() => {
+                rl.resume();
+                rl.prompt();
+            });
             break;
 
         case 'switch':
-            switchModel().then(() => rl.prompt());
+            rl.pause();
+            switchModel().then(() => {
+                rl.resume();
+                rl.prompt();
+            }).catch(() => {
+                rl.resume();
+                rl.prompt();
+            });
             break;
 
         case 'status':
