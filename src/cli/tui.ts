@@ -4,6 +4,10 @@
 import WebSocket from 'ws';
 import readline from 'node:readline';
 import chalk from 'chalk';
+import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadConfig } from '../config/index.js';
 
 const GATEWAY_URL = 'ws://127.0.0.1:19789/ws';
 
@@ -179,15 +183,27 @@ function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket
             rl.close();
             break;
 
+        case 'model':
+            showModel();
+            rl.prompt();
+            break;
+
+        case 'config':
+            showConfig();
+            rl.prompt();
+            break;
+
+        case 'version':
+            showVersion();
+            rl.prompt();
+            break;
+
         case 'status':
         case 'reset':
         case 'new':
         case 'compact':
         case 'tokens':
-        case 'model':
-        case 'config':
         case 'memory':
-        case 'version':
         case 'debug':
             // Send to agent
             ws.send(JSON.stringify({
@@ -253,4 +269,70 @@ function showHelp(): void {
     console.log(chalk.bold('Shell'));
     console.log('  /!<command>    Execute bash command (e.g., !ls, !pwd)');
     console.log('');
+}
+
+function showModel(): void {
+    try {
+        const configPath = path.join(os.homedir(), '.talon', 'config.json');
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const providerIds = Object.keys(config.agent.providers);
+        
+        console.log(chalk.cyan('\n🤖 Current Model'));
+        console.log(`  Model:     ${config.agent.model}`);
+        console.log(`  Providers: ${providerIds.join(', ')}`);
+        console.log('');
+    } catch (err) {
+        console.log(chalk.red('\n✗ Failed to load config'));
+        console.log('');
+    }
+}
+
+function showConfig(): void {
+    try {
+        const configPath = path.join(os.homedir(), '.talon', 'config.json');
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        
+        console.log(chalk.cyan('\n⚙️  Talon Configuration'));
+        console.log(chalk.dim('────────────────────────'));
+        console.log(`  Workspace:   ${config.workspace}`);
+        console.log(`  Model:       ${config.agent.model}`);
+        console.log(`  Gateway:     ${config.gateway.host}:${config.gateway.port}`);
+        console.log('');
+        console.log('  Channels:');
+        console.log(`    CLI:       ${config.channels.cli?.enabled ? '✅' : '❌'}`);
+        console.log(`    Telegram:  ${config.channels.telegram?.enabled ? '✅' : '❌'}`);
+        console.log(`    WhatsApp:  ${config.channels.whatsapp?.enabled ? '✅' : '❌'}`);
+        console.log(`    WebChat:   ${config.channels.webchat?.enabled ? '✅' : '❌'}`);
+        console.log('');
+        console.log(`  Providers:  ${Object.keys(config.agent.providers).join(', ')}`);
+        console.log('');
+    } catch (err) {
+        console.log(chalk.red('\n✗ Failed to load config'));
+        console.log('');
+    }
+}
+
+function showVersion(): void {
+    try {
+        const packagePath = path.join(process.cwd(), 'package.json');
+        const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
+        const uptime = process.uptime();
+        const hours = Math.floor(uptime / 3600);
+        const minutes = Math.floor((uptime % 3600) / 60);
+        const uptimeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        
+        console.log(chalk.cyan('\n🦅 Talon'));
+        console.log(chalk.dim('────────'));
+        console.log(`  Version:   ${pkg.version}`);
+        console.log(`  Name:      ${pkg.name}`);
+        console.log(`  Node:      ${process.version}`);
+        console.log(`  Platform:  ${os.platform()} ${os.arch()}`);
+        console.log(`  Uptime:    ${uptimeStr}`);
+        console.log('');
+        console.log(chalk.dim(`  ${pkg.description}`));
+        console.log('');
+    } catch (err) {
+        console.log(chalk.red('\n✗ Failed to load version info'));
+        console.log('');
+    }
 }
