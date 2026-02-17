@@ -55,16 +55,21 @@ export async function startTUI(): Promise<void> {
         try {
             const msg = JSON.parse(data.toString());
 
-            // Debug: log all messages
-            console.log(chalk.dim(`\n[DEBUG] Received: ${msg.type}`));
-
             if (msg.type === 'agent.response') {
-                // Clear the prompt line
-                readline.clearLine(process.stdout, 0);
-                readline.cursorTo(process.stdout, 0);
+                const payload = msg.payload;
 
-                if (msg.payload?.type === 'text') {
-                    process.stdout.write(chalk.green('🦅 Talon > ') + msg.payload.text);
+                if (payload?.type === 'text') {
+                    readline.clearLine(process.stdout, 0);
+                    readline.cursorTo(process.stdout, 0);
+                    process.stdout.write(chalk.green('🦅 Talon > ') + payload.content);
+                } else if (payload?.type === 'thinking') {
+                    readline.clearLine(process.stdout, 0);
+                    readline.cursorTo(process.stdout, 0);
+                    process.stdout.write(chalk.dim(`  💭 ${payload.content}`));
+                } else if (payload?.type === 'error') {
+                    console.log(chalk.red('\n❌ Error: ') + payload.content);
+                    isWaitingForResponse = false;
+                    rl.prompt();
                 }
             } else if (msg.type === 'agent.response.end') {
                 console.log('\n');
