@@ -96,6 +96,9 @@ export class TalonGateway {
         // Initialize subagents
         await this.initializeSubagents();
         
+        // Initialize Shadow Loop
+        await this.initializeShadowLoop();
+        
         registerAllTools(this.agentLoop, this.config);
 
         // Phase 4: Plugin System
@@ -208,6 +211,30 @@ export class TalonGateway {
         this.agentLoop.registerTool(createSubagentTool(registry));
         
         logger.info({ model: subagentModel }, 'Subagents initialized');
+    }
+
+    /**
+     * Initialize Shadow Loop (proactive intelligence)
+     */
+    private async initializeShadowLoop(): Promise<void> {
+        if (!this.config.shadow?.enabled) {
+            logger.info('Shadow Loop disabled');
+            return;
+        }
+
+        const { ShadowLoop } = await import('../shadow/index.js');
+        const shadow = new ShadowLoop({
+            paths: this.config.shadow.watchers.filesystem.paths,
+            ignored: this.config.shadow.watchers.filesystem.ignore,
+        });
+
+        // Connect ghost messages to event bus
+        shadow.onGhostMessage((message) => {
+            logger.debug({ message: message.message }, 'Ghost message');
+        });
+
+        shadow.start();
+        logger.info('Shadow Loop initialized');
     }
 
     /**
