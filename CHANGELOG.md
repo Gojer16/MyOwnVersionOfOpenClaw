@@ -1,0 +1,555 @@
+# Changelog
+
+All notable changes to Talon will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.3.0] - 2026-02-17
+
+### 🏗️ Enterprise Architecture Release
+
+Major architectural upgrade implementing OpenClaw-inspired enterprise-grade components: Protocol Layer, Session Key System, Plugin Architecture, Cron Scheduler, and **Enhanced CLI with Skill Command Registration**.
+
+### ✨ New Features
+
+#### Enhanced CLI with Skill Command Registration
+- **Skill Command System** (`src/channels/cli/skill-commands.ts`)
+  - Extensible command registration for skills
+  - Category-based command organization (System, Session, Skills)
+  - Built-in commands + skill commands unified registry
+  
+- **New Essential Commands**:
+  - **/config** - View current Talon configuration (workspace, model, channels)
+  - **/memory** - View recent memory files with dates
+  - **/clear** - Clear screen and show welcome banner
+  - **/version** - Show version, node version, platform, uptime
+  - **/debug** - Toggle debug logging on/off
+  
+- **Enhanced Command Registry** (`src/channels/cli/commands.ts`)
+  - Category support for better help organization
+  - Command suggestions for mistyped commands
+  - Spinner animations for long-running operations
+  - Better help formatting with categories
+  
+- **Example Skill Implementation**:
+  - **/time** - Show current date and time
+  - **/echo** - Echo back input text
+  - **/calc** - Simple calculator (e.g., `/calc 2+2`)
+  - Demonstrates skill command registration pattern
+  
+- **Skills Loader Foundation**:
+  - Basic infrastructure for loading skills
+  - Skill command registration API
+  - Future-proof architecture for extensibility
+
+#### Protocol Layer (`src/protocol/`)
+- **Gateway Frame Types**: hello, hello_ok, event, ping, pong, error
+- **Chat Events**: delta, final, aborted, error states
+- **Event Types**: Agent, Session, Tool, Protocol events
+- **Zod Validation**: Runtime schema validation for all messages
+- **Error Codes**: 15+ standardized error codes
+- **Frame Builders**: Helper functions for constructing frames
+- **Files**: `src/protocol/index.ts` (240 lines)
+
+### ✨ New Features
+
+#### Essential CLI Commands
+- **/config** - View current Talon configuration (workspace, model, channels)
+- **/memory** - View recent memory files with dates
+- **/clear** - Clear screen and show welcome banner
+- **/version** - Show version, node version, platform, uptime
+- **/debug** - Toggle debug logging on/off
+
+#### Protocol Layer (`src/protocol/`)
+- **Gateway Frame Types**: hello, hello_ok, event, ping, pong, error
+- **Chat Events**: delta, final, aborted, error states
+- **Event Types**: Agent, Session, Tool, Protocol events
+- **Zod Validation**: Runtime schema validation for all messages
+- **Error Codes**: 15+ standardized error codes
+- **Frame Builders**: Helper functions for constructing frames
+- **Files**: `src/protocol/index.ts` (240 lines)
+
+#### Session Key System (`src/gateway/session-keys.ts`)
+- **Format**: `channel:senderId[:agentId][:scope][:groupId][:threadId]`
+- **SessionKeyBuilder**: Fluent API for constructing keys
+- **Key Components**: Channel, sender, agent, scope, group/thread IDs
+- **SessionKeyStore**: Registry with activity tracking
+- **Utilities**: Parse, normalize, derive from messages
+- **Files**: `src/gateway/session-keys.ts` (330 lines)
+
+#### Plugin Architecture (`src/plugins/`)
+- **Plugin Interface**: Standard contract with activate/deactivate
+- **Plugin API**: Config, events, agent, logger access
+- **Plugin Loader**: Dynamic loading from directories
+- **Plugin Registry**: Channel, tool, auth provider registration
+- **Type-Safe**: Full TypeScript contracts
+- **Files**: `src/plugins/index.ts` (390 lines)
+
+#### Cron/Scheduler (`src/cron/`)
+- **Cron Parser**: Standard syntax + @daily, @hourly, @reboot
+- **Job Management**: Add, remove, enable, disable jobs
+- **Event System**: jobStarted, jobCompleted, jobFailed
+- **Features**: Auto next-run, timeout, retry, run logs
+- **Presets**: Every minute, 5 minutes, hourly, daily
+- **Files**: `src/cron/index.ts` (480 lines)
+
+#### Enhanced Gateway (`src/gateway/enhanced-index.ts`)
+- **8-Phase Boot**: Config → Infrastructure → AI → Plugins → Server → Cron → Events → Channels
+- **Full Integration**: All new components wired together
+- **Status Reporting**: Providers, plugins, cron jobs, sessions
+- **Graceful Shutdown**: Proper cleanup sequence
+- **Files**: `src/gateway/enhanced-index.ts` (380 lines)
+
+### 🔧 Technical Changes
+- **Event System**: 30+ new event types (protocol, plugin, cron, channel, system)
+- **Type Safety**: All protocol messages validated with Zod
+- **Architecture**: Now matches OpenClaw core design patterns
+- **Code Size**: +1,500 lines (7,100 → 8,600)
+- **Files**: +4 new architectural modules
+
+### 🐛 Bug Fixes
+
+#### Critical: Tool Message Completeness (`src/memory/manager.ts`)
+- **Problem**: DeepSeek/OpenAI API throws 400 error when assistant messages with `tool_calls` don't have all corresponding tool result messages
+- **Root Cause**: Context window truncation (`keepRecentMessages`) could cut off some tool results while keeping the assistant message that made the calls
+- **Solution**: Added logic to detect missing tool results and include them in the context, even if they exceed `keepRecentMessages`
+- **Error Fixed**: "An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. (insufficient tool messages following tool_calls message)"
+
+#### Enhanced Error Handling (`src/gateway/index.ts`, `src/channels/cli/index.ts`)
+- **Problem**: Agent errors would crash the conversation without user feedback
+- **Solution**: Implemented graceful error handling with user-friendly messages
+- **Features**:
+  - Specific error messages for different error types (billing, rate limit, timeout, tool context, network)
+  - Error messages displayed with yellow ⚠️  indicator in CLI
+  - Session persisted even on error (conversation not lost)
+  - WebSocket error broadcasts with `recoverable: true` flag
+  - Debug mode shows error details
+
+### 📊 Architecture Comparison
+
+| Component | OpenClaw | Talon v0.3.0 |
+|-----------|----------|--------------|
+| Protocol Layer | JSON Schema | Zod validation |
+| Session Keys | Complex system | Full implementation |
+| Plugins | Extension SDK | Plugin architecture |
+| Cron | Isolated agents | Native scheduler |
+
+### 📁 New Files
+- `src/protocol/index.ts` - Protocol definitions
+- `src/gateway/session-keys.ts` - Session management
+- `src/gateway/enhanced-index.ts` - Enhanced gateway
+- `src/plugins/index.ts` - Plugin system
+- `src/cron/index.ts` - Cron scheduler
+- `docs/ARCHITECTURE_ENHANCEMENTS.md` - Architecture docs
+- `src/channels/cli/skill-commands.ts` - Skill command registration system
+- `src/channels/cli/commands.ts` - Enhanced command registry with categories
+
+### ✅ Testing
+- TypeScript compilation: ✅ Pass
+- Type safety: ✅ Full coverage
+- No circular dependencies: ✅ Verified
+
+---
+
+## [0.2.2] - 2026-02-16
+
+### Core Architecture Improvements
+
+Enhanced reliability and production-readiness with OpenClaw-inspired features.
+
+### ✨ New Features
+
+#### Health Checks
+- **Basic Health Endpoint** (`/api/health`)
+  - Version, uptime, session count, WebSocket client count
+  - Component status reporting
+  
+- **Deep Health Probe** (`/api/health/deep`)
+  - Probes each component (sessions, agent, memory)
+  - Returns degraded status if any component fails
+  
+- **Readiness Check** (`/api/ready`)
+  - For load balancers and orchestration
+  - Returns false if agent not initialized
+
+#### Config Hot Reload
+- **Automatic Reload** - Watches `~/.talon/config.json` for changes
+- **Debounced Updates** - 300ms debounce to prevent rapid reloads
+- **Event Emission** - Emits `config.reloaded` event on changes
+- **Handler System** - Register handlers for component-specific reload
+
+#### Daemon Mode
+- **Background Running** - Run Talon as a system service
+- **PID File Management** - Track running process
+- **Platform Support** - macOS (launchd) and Linux (systemd)
+- **Service File Generation** - Generate launchd plist or systemd unit
+
+#### CLI Commands
+- `talon start --daemon` - Run in background
+- `talon stop` - Stop running daemon
+- `talon restart` - Restart daemon
+- `talon health` - Enhanced with component status
+
+### 📦 Files Added
+- `src/config/reload.ts` - Config hot reload system
+- `src/scripts/daemon.ts` - Daemon support utilities
+
+### 📦 Files Changed
+- `src/gateway/server.ts` - Enhanced health endpoints
+- `src/gateway/index.ts` - Config reloader integration
+- `src/scripts/daemon.ts` - Daemon support
+- `src/cli/index.ts` - Added stop/restart commands
+- `src/utils/types.ts` - Added config.reloaded event
+
+---
+
+## [0.2.1] - 2026-02-16
+
+### Web Search & Setup Wizard Updates
+
+Enhanced web search capabilities and improved configuration experience.
+
+### ✨ New Features
+
+#### Web Search (Enhanced)
+- **DeepSeek Real API Integration** - Direct API at `https://api.deepseek.com`
+  - Uses `deepseek-chat` model for search queries
+  - Much cheaper than via OpenRouter (~ $0.14/1M tokens)
+  
+- **Multi-Provider Fallback Chain**:
+  1. DeepSeek (primary, cheapest)
+  2. OpenRouter (fallback)
+  3. Tavily (free tier, 100 searches/month)
+  4. DuckDuckGo (last resort, free scraping)
+
+- **Smart API Key Detection**:
+  - Checks config first, then environment variables
+  - Supports: `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `TAVILY_API_KEY`
+
+- **Improved Web Fetch**:
+  - JSDOM-based HTML parsing
+  - Content cleaning (removes ads, nav, footers)
+  - Configurable max characters
+
+#### Setup Wizard (Enhanced)
+- **New Step 5/6: Tools Configuration**
+  - Choose web search provider
+  - Option to use same LLM or different provider
+  - API key input for selected provider
+  
+- **Provider Selection**:
+  - DeepSeek API (recommended)
+  - OpenRouter (multi-model)
+  - Tavily (free tier)
+  - DuckDuckGo (free, unreliable)
+
+- **API Key Management**:
+  - Auto-detect existing keys in environment
+  - Prompt to reuse or enter new keys
+  - Secure storage in `~/.talon/.env`
+
+### 🔧 Technical Changes
+- Updated `config/schema.ts` with new web search options
+- Added `jsdom` dependency for HTML parsing
+- Web tools now auto-fallback on provider failure
+
+### 📦 Files Changed
+- `src/config/schema.ts` - Added web search config
+- `src/tools/web.ts` - Complete rewrite with DeepSeek + fallbacks
+- `src/cli/wizard.ts` - Added Tools configuration step
+- `package.json` - Added jsdom dependency
+
+---
+
+## [0.2.0] - 2026-02-16
+
+### 🎉 Major Release - Production Ready Core
+
+This release transforms Talon from a basic prototype into a production-ready personal AI assistant with enterprise-grade reliability features.
+
+### ✨ New Features
+
+#### Multi-Channel Support
+- **WhatsApp Channel** - Full WhatsApp Web integration via `whatsapp-web.js`
+  - QR code authentication
+  - Direct message support
+  - Group chat support with mention-gating
+  - Automatic session persistence
+  - Phone number authorization
+  
+- **Telegram Channel** - Bot integration via polling
+  - Long-polling message reception
+  - User and group authorization
+  - Mention-based activation
+  
+- **CLI Channel** - Enhanced terminal interface
+  - Interactive REPL with readline
+  - Slash command system (`/help`, `/status`, `/reset`, `/tokens`, `/exit`)
+  - Bash execution support (`!ls`, `!pwd`)
+  - Tab completion for commands
+  - Colored output with chalk
+  - Token usage display after each response
+  - Smart session resumption on startup
+
+#### Agent Engine Enhancements
+- **Context Window Guard** (`src/agent/context-guard.ts`)
+  - Prevents token overflow crashes
+  - Automatic message truncation when context limit approached
+  - Support for multiple LLM context window sizes
+  - Token estimation (~4 chars/token)
+  
+- **Model Fallback System** (`src/agent/fallback.ts`)
+  - Automatic retry with different providers on failure
+  - Smart error classification (auth, rate-limit, timeout, billing)
+  - Provider priority system (cheapest first)
+  - Tracks which provider successfully served the request
+  - Usage tracking per provider
+  
+- **Enhanced Agent Loop** (`src/agent/loop.ts`)
+  - State machine: idle → thinking → executing → evaluating → responding
+  - Tool call support with execution and result handling
+  - Memory compression trigger
+  - Max iteration protection (prevents infinite loops)
+  - Event bus integration for real-time updates
+  - Provider tracking in responses
+
+#### Tools & Capabilities
+- **File Tools** (`src/tools/file.ts`)
+  - Read, write, list, search files
+  - Path validation and security
+  - Large file handling with truncation
+  
+- **Shell Tools** (`src/tools/shell.ts`)
+  - Command execution with child_process
+  - Timeout support
+  - Output size limits
+  - Security confirmation for destructive operations
+  
+- **Web Tools** (`src/tools/web.ts`)
+  - Web search via multiple providers (DeepSeek, OpenRouter, Tavily, DuckDuckGo)
+  - Web page fetching and content extraction
+  - JSDOM-based HTML parsing
+  - Content cleaning (remove ads, navigation, etc.)
+  
+- **Memory Tools** (`src/tools/memory-tools.ts`)
+  - Read/write to memory system
+  - Fact storage and retrieval
+  
+- **Browser Tools** (planned integration via Playwright)
+
+#### Memory System
+- **Memory Manager** (`src/memory/manager.ts`)
+  - Context window management
+  - Message history tracking
+  - Automatic context building for LLM calls
+  - System prompt injection
+  - SOUL.md loading for personality
+  
+- **Memory Compressor** (`src/memory/compressor.ts`)
+  - Summarizes old messages to save tokens
+  - Threshold-based compression triggers
+  - Maintains recent message context
+
+#### Configuration & Security
+- **Secure Configuration System**
+  - Environment variable support via `${ENV_VAR}` syntax
+  - `.env` file loading from `~/.talon/.env`
+  - `config.json` with variable substitution
+  - Secure setup wizard (`npm run setup:secure`)
+  - Template-based workspace initialization
+  
+- **Data Separation for Open Source**
+  - `templates/workspace/` - Generic templates (committed)
+  - `~/.talon/workspace/` - Personal data (gitignored)
+  - Automatic template copying on first run
+  - Clear separation between public code and private data
+  - Security documentation (`docs/REPOSITORY_SECURITY.md`)
+
+#### Gateway & Server
+- **Talon Gateway** (`src/gateway/`)
+  - Fastify-based HTTP server
+  - WebSocket support for real-time communication
+  - Health check endpoint (`/api/health`)
+  - Session management API
+  - Event bus for inter-component communication
+  
+- **Session Manager** (`src/gateway/sessions.ts`)
+  - Session creation, retrieval, persistence
+  - JSON file-based storage
+  - Automatic cleanup of idle sessions
+  
+- **Message Router** (`src/gateway/router.ts`)
+  - Routes messages between channels and sessions
+  - Inbound/outbound message handling
+  - Deduplication protection
+
+#### Model Support
+- **Multi-Provider Model Router** (`src/agent/router.ts`)
+  - DeepSeek integration
+  - OpenRouter integration
+  - OpenAI integration
+  - Custom provider support
+  - Cost-based routing (cheapest model for task)
+  - Quality-based routing (best model for complex tasks)
+  
+- **OpenAI-Compatible Provider** (`src/agent/providers/openai-compatible.ts`)
+  - Generic provider for OpenAI-compatible APIs
+  - Chat completions with tool support
+  - Streaming support (foundation)
+  - Usage tracking
+
+#### CLI & Interface
+- **Command Line Interface** (`src/cli/`)
+  - `talon setup` - Configuration wizard
+  - `talon start` - Start gateway (with `--daemon` flag)
+  - `talon health` - Health check
+  - `talon status` - Detailed status and sessions
+  - Interactive setup script (`scripts/setup-secure.js`)
+
+#### Documentation
+- Comprehensive documentation suite:
+  - `00-VISION.md` - Project vision and principles
+  - `01-ARCHITECTURE.md` - System architecture
+  - `02-COMPONENTS.md` - Component specifications
+  - `03-TOOLS-AND-CAPABILITIES.md` - Tool documentation
+  - `04-CHANNELS-AND-INTERFACES.md` - Channel documentation
+  - `05-MEMORY-AND-PERSONA.md` - Memory system
+  - `06-SECURITY.md` - Security considerations
+  - `07-CONFIGURATION.md` - Configuration reference
+  - `08-ROADMAP.md` - Project roadmap
+  - `SECURITY.md` - Secure configuration guide
+  - `REPOSITORY_SECURITY.md` - Open source security
+
+### 🔧 Technical Improvements
+
+#### Code Quality
+- TypeScript strict mode compliance
+- 35 source files with type safety
+- Comprehensive error handling
+- Structured logging with pino
+- Input validation with Zod schemas
+
+#### Build System
+- TypeScript compilation (`npm run build`)
+- Development mode with hot reload (`npm run dev`)
+- Test suite with Vitest
+- Git hooks support
+
+#### Dependencies
+- **Core**: Node.js 22+, TypeScript 5.7+
+- **Server**: Fastify 5.x, WebSocket support
+- **AI**: OpenAI SDK, custom providers
+- **Channels**: whatsapp-web.js, node-telegram-bot-api (planned)
+- **Utilities**: chalk, inquirer, nanoid, zod
+- **Build**: tsx, vitest
+
+### 🐛 Bug Fixes
+- Fixed context window overflow issues
+- Fixed duplicate message handling
+- Fixed CLI response formatting
+- Fixed TypeScript type errors in web tools
+- Fixed memory compression edge cases
+
+### 🛡️ Security
+- API keys stored in `.env` (never committed)
+- Personal data in `~/.talon/` (gitignored)
+- Path traversal protection in file tools
+- Command injection protection in shell tools
+- Session isolation between users
+
+### 📦 Project Structure
+```
+talon/
+├── src/
+│   ├── agent/           # AI agent loop, providers, routing
+│   ├── channels/        # Telegram, WhatsApp, CLI
+│   ├── cli/             # Command line interface
+│   ├── config/          # Configuration loading, validation
+│   ├── gateway/         # HTTP server, sessions, events
+│   ├── memory/          # Memory management, compression
+│   ├── tools/           # File, shell, web tools
+│   ├── types/           # TypeScript declarations
+│   └── utils/           # Logger, errors, helpers
+├── templates/
+│   └── workspace/       # Generic AI personality templates
+├── docs/                # Documentation
+├── scripts/             # Setup scripts
+└── workspace/           # Personal data (gitignored)
+```
+
+### 📝 Configuration
+- JSON-based configuration with Zod validation
+- Environment variable substitution
+- Sensible defaults for all options
+- Per-channel authorization settings
+- Tool-specific security settings
+
+### 🚀 Deployment
+- Local development mode
+- Daemon mode for background operation
+- Docker-ready (containerization support)
+- Environment-based configuration
+
+### ⚠️ Breaking Changes
+None - this is a new release building on 0.1.0 foundation.
+
+### 🎯 Known Limitations
+- WhatsApp requires Puppeteer/Chromium (heavy dependency)
+- Memory stored in JSON files (SQLite planned for future)
+- No web dashboard UI yet (CLI and messaging only)
+- Shadow loop not fully implemented
+- Mobile apps not yet available
+
+---
+
+## [0.1.0] - 2026-02-15
+
+### Initial Release - Foundation
+
+Basic prototype with core functionality:
+
+### Features
+- Basic agent loop with state machine
+- CLI channel with simple readline interface
+- File and shell tools
+- Basic memory management
+- Configuration system with Zod
+- Gateway server foundation
+- Telegram channel (basic)
+- Documentation structure
+
+### Tech Stack
+- Node.js 22+
+- TypeScript 5.5+
+- Fastify
+- Zod validation
+
+---
+
+## Future Roadmap
+
+### [0.3.0] - Planned
+- Web dashboard UI (React-based)
+- Skills system (plugin architecture)
+- Calendar integration
+- Email integration
+- Advanced memory (SQLite)
+
+### [0.4.0] - Planned
+- Shadow loop (proactive agent)
+- Voice interface
+- Image generation tools
+- Canvas/drawing tools
+- iOS/Android apps
+
+### [1.0.0] - Planned
+- Stable API
+- Plugin marketplace
+- Multi-user support (enterprise)
+- Advanced security features
+- Production deployment guides
+
+---
+
+**Full Changelog**: https://github.com/yourusername/talon/commits/main
