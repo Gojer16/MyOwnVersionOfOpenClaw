@@ -428,8 +428,13 @@ export class TalonGateway {
 
         try {
             logger.info('Running BOOT.md hook...');
-            const bootContent = fs.readFileSync(bootMdPath, 'utf-8');
+            const bootContent = fs.readFileSync(bootMdPath, 'utf-8').trim();
             
+            if (!bootContent) {
+                logger.warn('BOOT.md is empty, skipping');
+                return;
+            }
+
             // Replace {{DATE}} placeholder with current date
             const now = new Date();
             const dateStr = now.toLocaleDateString('en-US', { 
@@ -440,28 +445,47 @@ export class TalonGateway {
             });
             const processedContent = bootContent.replace(/\{\{DATE\}\}/g, dateStr);
 
-            // Create a system session for boot
+            // Build boot prompt (similar to OpenClaw)
+            const bootPrompt = [
+                'You are running a boot check. Follow BOOT.md instructions exactly.',
+                '',
+                'BOOT.md:',
+                processedContent,
+                '',
+                'If BOOT.md asks you to do something, execute it now.',
+                'If nothing needs attention, simply acknowledge with "Boot complete."',
+            ].join('\n');
+
+            // Create a temporary boot session
             const bootSession = this.sessionManager.createSession(
                 'system',
                 'boot-hook',
                 'Boot Hook'
             );
 
-            // Add boot content as system message
+            // Add boot prompt as user message
             bootSession.messages.push({
                 id: `boot_${Date.now()}`,
-                role: 'system',
-                content: `[BOOT INSTRUCTIONS]\n\n${processedContent}`,
+                role: 'user',
+                content: bootPrompt,
                 timestamp: Date.now(),
             });
 
-            // Persist the session
-            this.sessionManager.persistSession(bootSession);
+            // Run through agent loop
+            logger.info('Executing BOOT.md through agent...');
+            for await (const chunk of this.agentLoop.run(bootSession)) {
+                if (chunk.type === 'done') {
+                    logger.info('✓ BOOT.md executed successfully');
+                    console.log(chalk.green('  ✓ BOOT.md executed'));
+                    break;
+                }
+            }
 
-            logger.info('✓ BOOT.md executed successfully');
-            console.log(chalk.green('  ✓ BOOT.md loaded'));
+            // Don't persist boot session - it's temporary
+            
         } catch (err) {
             logger.error({ err, path: bootMdPath }, 'Failed to run BOOT.md');
+            console.log(chalk.yellow('  ⚠ BOOT.md execution failed'));
         }
     }
 
