@@ -1,8 +1,8 @@
 # Talon Features Catalog
 
-**Version:** 0.2.0  
-**Total Lines of Code:** ~7,100 TypeScript  
-**Source Files:** 36  
+**Version:** 0.3.0  
+**Total Lines of Code:** ~8,500 TypeScript  
+**Source Files:** 40  
 **Documentation Files:** 11  
 
 This document provides a comprehensive inventory of all features, capabilities, and components in Talon.
@@ -15,18 +15,19 @@ This document provides a comprehensive inventory of all features, capabilities, 
 
 | Category | Features | Status |
 |----------|----------|--------|
-| **Channels** | 3 (CLI, Telegram, WhatsApp) | ✅ Production |
+| **Channels** | 4 (CLI, TUI, Telegram, WhatsApp) | ✅ Production |
 | **AI/Agent** | 8 core capabilities | ✅ Production |
 | **Tools** | 4 categories, 9+ tools | ✅ Production |
 | **Memory** | 4-tier system | ✅ Production |
 | **Security** | 6 protection layers | ✅ Production |
 | **Configuration** | 8 config sections | ✅ Production |
-| **CLI Commands** | 10 slash commands | ✅ Production |
+| **CLI Commands** | 15+ commands | ✅ Production |
 | **API Endpoints** | 4 HTTP + 1 WebSocket | ✅ Production |
+| **Service Management** | 6 commands | ✅ Production |
 
 ---
 
-## 💬 Channels (3)
+## 💬 Channels (4)
 
 ### 1. CLI Channel (`src/channels/cli/index.ts`)
 
@@ -42,6 +43,10 @@ This document provides a comprehensive inventory of all features, capabilities, 
   - `/tokens` - Display estimated token usage
   - `/compact` - Trigger memory compression
   - `/model` - Show current model
+  - `/config` - View configuration
+  - `/version` - Show version info
+  - `/memory` - View recent memory
+  - `/debug` - Toggle debug logging
   - `/exit` or `/quit` - Exit Talon
 - **Bash Execution** (`!command`) - Run shell commands directly
 - **Tab Completion** for slash commands
@@ -60,14 +65,49 @@ This document provides a comprehensive inventory of all features, capabilities, 
   - Code block handling
   - WhatsApp/Telegram format stripping
 
-#### CLI Event Listeners:
-- `message.outbound` - Display agent responses
-- `tool.execute` - Show tool usage notifications
-- `agent.thinking` - Display thinking status
+---
+
+### 2. TUI Client (`src/cli/tui.ts`) ⭐ NEW
+
+**Status:** ✅ Production Ready  
+**Lines of Code:** ~280
+
+#### Features:
+- **WebSocket Client** - Connects to running gateway
+- **Real-time Chat** - Stream responses with typing indicators
+- **Status Indicators**:
+  - ✓ Connected to gateway
+  - ⚡ Model: openrouter/gpt-4o
+  - 📍 Workspace: ~/.talon/workspace
+- **Typing Indicator** - ⏳ Talon is thinking...
+- **Better Tool Display**:
+  - Shows file names: 🛠️ file_read → IDENTITY.md
+  - Shows queries: 🛠️ web_search → latest news...
+- **Response Formatting**:
+  ```
+  ╭─ Talon ─────────────────────
+  │ Hey! 👋 How can I help?
+  ╰─────────────────────────────
+  ```
+- **Slash Commands**:
+  - `/help` - Show available commands
+  - `/clear` - Clear screen
+  - `/exit` - Exit TUI
+  - `/status` - Show session status
+  - `/model` - Show current model
+  - `/config` - View configuration
+  - `/version` - Show version info
+  - `/reset` - Reset session
+  - `/tokens` - Show token usage
+  - `/memory` - View memory
+- **Bash Execution** - `!ls -la` runs shell commands
+- **Gateway Check** - Verifies gateway is running before connecting
+- **1.5s Startup Delay** - Waits for gateway to be fully ready
+- **Graceful Disconnect** - Clean exit handling
 
 ---
 
-### 2. Telegram Channel (`src/channels/telegram/index.ts`)
+### 3. Telegram Channel (`src/channels/telegram/index.ts`)
 
 **Status:** ✅ Production Ready  
 **Lines of Code:** ~200
@@ -762,15 +802,42 @@ idle → thinking → executing → evaluating → responding → idle
 
 ## 🚀 CLI Commands
 
-### Available Commands:
+### Main Commands:
 
 1. **talon setup** - Interactive setup wizard
-2. **talon setup:secure** - Secure setup with env vars
-3. **talon start** - Start gateway (with --daemon flag)
-4. **talon health** - Check gateway health
-5. **talon status** - Show detailed status
+2. **talon tui** - Connect to running gateway (interactive TUI) ⭐ NEW
+3. **talon provider** - Add/change AI provider ⭐ NEW
+4. **talon switch** - Switch between configured models ⭐ NEW
+5. **talon start** - Start gateway (with --daemon flag)
+6. **talon stop** - Stop running daemon
+7. **talon restart** - Restart daemon
+8. **talon health** - Check gateway health
+9. **talon status** - Show detailed status
 
-### In-App Slash Commands:
+### Service Management Commands: ⭐ NEW
+
+1. **talon service install** - Install as system service (LaunchAgent/systemd)
+2. **talon service uninstall** - Remove service
+3. **talon service start** - Start service
+4. **talon service stop** - Stop service temporarily
+5. **talon service restart** - Restart running service
+6. **talon service status** - Check installation and running state
+
+### Provider Management: ⭐ NEW
+
+**talon provider** features:
+- Reuses existing API keys from `.env`
+- Fetches all 342+ OpenRouter models dynamically
+- Multi-model selection for fallback (checkbox interface)
+- Auto-restart gateway option
+- Interactive prompts with inquirer
+
+**talon switch** features:
+- Shows all models from selected provider
+- Updates config
+- Optionally restarts gateway
+
+### In-App Slash Commands (TUI/CLI):
 
 1. **/help** - Show available commands
 2. **/status** - Show session status
@@ -778,7 +845,67 @@ idle → thinking → executing → evaluating → responding → idle
 4. **/tokens** - Show token usage
 5. **/compact** - Trigger compression
 6. **/model** - Show current model
-7. **/exit** or **/quit** - Exit Talon
+7. **/config** - View configuration
+8. **/version** - Show version info
+9. **/memory** - View recent memory
+10. **/debug** - Toggle debug logging
+11. **/clear** - Clear screen (TUI only)
+12. **/exit** or **/quit** - Exit Talon
+
+---
+
+## 🎨 TUI Features ⭐ NEW
+
+### Visual Enhancements:
+
+**Status Indicators:**
+```
+✓ Connected to gateway
+⚡ Model: openrouter/gpt-4o
+📍 Workspace: ~/.talon/workspace
+```
+
+**Typing Indicator:**
+```
+⏳ Talon is thinking...
+```
+
+**Tool Display:**
+```
+🛠️  file_read → IDENTITY.md
+🛠️  web_search → latest AI news...
+```
+
+**Response Formatting:**
+```
+╭─ Talon ─────────────────────
+│ Hey! 👋 How can I help?
+╰─────────────────────────────
+```
+
+### Connection Management:
+- Gateway health check before connecting
+- 1.5s startup delay for gateway readiness
+- Graceful disconnect handling
+- Automatic reconnection on gateway restart
+
+---
+
+## 📦 Service Management ⭐ NEW
+
+### Features:
+- **Platform Support**: macOS (LaunchAgent), Linux (systemd)
+- **Runtime Selection**: Node or Bun
+- **Modern launchctl**: Uses `bootstrap`, `bootout`, `kickstart`
+- **Auto-start**: Service starts on login
+- **Auto-restart**: KeepAlive ensures service restarts on failure
+- **Separate Start/Stop**: Control without reinstalling
+- **Status Checking**: Shows installation and running state
+
+### Service Files:
+- **macOS**: `~/Library/LaunchAgents/ai.talon.gateway.plist`
+- **Linux**: `~/.config/systemd/user/talon.service`
+- **Logs**: `~/Library/Logs/talon.log` (macOS)
 
 ---
 
@@ -859,22 +986,33 @@ talon/
 ## 📊 Statistics Summary
 
 ### Code Metrics:
-- **Total Lines:** ~7,100 TypeScript
-- **Source Files:** 36
+- **Total Lines:** ~8,500 TypeScript
+- **Source Files:** 40
 - **Documentation Files:** 11
 - **Template Files:** 9
-- **Dependencies:** 15 production, 7 dev
+- **Dependencies:** 17 production, 8 dev
 
 ### Feature Count:
-- **Channels:** 3
+- **Channels:** 4 (CLI, TUI, Telegram, WhatsApp)
 - **AI Capabilities:** 8
 - **Tool Categories:** 4
 - **Individual Tools:** 9+
-- **CLI Commands:** 10
+- **CLI Commands:** 15+
+- **Service Commands:** 6
 - **API Endpoints:** 4 HTTP + 1 WebSocket
 - **Memory Tiers:** 4
 - **Security Layers:** 6
 - **Config Sections:** 9
+
+### New in v0.3.0:
+- **TUI Client** with status indicators and formatting
+- **Provider Management** (`talon provider`, `talon switch`)
+- **Service Management** (start/stop/restart/status)
+- **Multi-model Fallback** selection
+- **Dynamic OpenRouter Models** (342+ models)
+- **Better Tool Display** in TUI
+- **Response Formatting** with boxes
+- **Typing Indicators**
 
 ### Test Coverage:
 - Test Framework: Vitest
@@ -885,7 +1023,7 @@ talon/
 ## 🎯 Feature Completeness
 
 ### ✅ Fully Implemented:
-- Multi-channel support (CLI, Telegram, WhatsApp)
+- Multi-channel support (CLI, TUI, Telegram, WhatsApp)
 - AI agent with state machine
 - Context window protection
 - Model fallback system
@@ -900,6 +1038,10 @@ talon/
 - WebSocket support
 - Security features
 - Documentation
+- **TUI client with visual enhancements** ⭐ NEW
+- **Provider management commands** ⭐ NEW
+- **Service management** ⭐ NEW
+- **Multi-model fallback** ⭐ NEW
 
 ### 🚧 Planned/Partial:
 - Web dashboard UI
@@ -922,5 +1064,5 @@ talon/
 
 ---
 
-**Last Updated:** 2026-02-16  
-**Version:** 0.2.0
+**Last Updated:** 2026-02-17  
+**Version:** 0.3.0
