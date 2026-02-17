@@ -164,7 +164,7 @@ Examples:
         }
 
         case 'service': {
-            const { installService, uninstallService, restartService, serviceStatus } = await import('./service.js');
+            const { installService, uninstallService, restartService, serviceStatus, stopService, startService } = await import('./service.js');
             const subcommand = flags[0];
             
             switch (subcommand) {
@@ -177,11 +177,17 @@ Examples:
                 case 'restart':
                     await restartService();
                     break;
+                case 'stop':
+                    await stopService();
+                    break;
+                case 'start':
+                    await startService();
+                    break;
                 case 'status':
                     await serviceStatus();
                     break;
                 default:
-                    console.error('Usage: talon service <install|uninstall|restart|status>');
+                    console.error('Usage: talon service <install|uninstall|start|stop|restart|status>');
                     process.exit(1);
             }
             break;

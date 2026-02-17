@@ -63,6 +63,83 @@ export function isServiceInstalled(): boolean {
 }
 
 /**
+ * Stop the service temporarily (without uninstalling)
+ */
+export async function stopService(): Promise<void> {
+    console.log(chalk.blue('🛑 Stopping Talon service...\n'));
+
+    if (process.platform === 'darwin') {
+        const label = SERVICE_LABEL;
+        const domain = `gui/${process.getuid?.() ?? 501}`;
+
+        try {
+            execSync(`launchctl bootout ${domain}/${label}`, {
+                stdio: 'pipe',
+                timeout: 5000,
+            });
+            console.log(chalk.green('✓ Service stopped'));
+        } catch (err: any) {
+            if (err.message?.includes('Could not find service')) {
+                console.log(chalk.yellow('⚠ Service is not running'));
+            } else {
+                console.log(chalk.red('✗ Failed to stop service'));
+                console.log(chalk.dim(err.message));
+            }
+        }
+    } else if (process.platform === 'linux') {
+        try {
+            execSync('systemctl --user stop talon.service', { stdio: 'pipe' });
+            console.log(chalk.green('✓ Service stopped'));
+        } catch (err: any) {
+            console.log(chalk.red('✗ Failed to stop service'));
+            console.log(chalk.dim(err.message));
+        }
+    }
+}
+
+/**
+ * Start the service (if installed but not running)
+ */
+export async function startService(): Promise<void> {
+    console.log(chalk.blue('▶️  Starting Talon service...\n'));
+
+    if (process.platform === 'darwin') {
+        const { file } = getServicePaths();
+        
+        if (!fs.existsSync(file)) {
+            console.log(chalk.red('✗ Service not installed. Run `talon service install` first.'));
+            return;
+        }
+
+        const label = SERVICE_LABEL;
+        const domain = `gui/${process.getuid?.() ?? 501}`;
+
+        try {
+            execSync(`launchctl bootstrap ${domain} ${file}`, {
+                stdio: 'pipe',
+                timeout: 5000,
+            });
+            console.log(chalk.green('✓ Service started'));
+        } catch (err: any) {
+            if (err.message?.includes('Already loaded')) {
+                console.log(chalk.yellow('⚠ Service is already running'));
+            } else {
+                console.log(chalk.red('✗ Failed to start service'));
+                console.log(chalk.dim(err.message));
+            }
+        }
+    } else if (process.platform === 'linux') {
+        try {
+            execSync('systemctl --user start talon.service', { stdio: 'pipe' });
+            console.log(chalk.green('✓ Service started'));
+        } catch (err: any) {
+            console.log(chalk.red('✗ Failed to start service'));
+            console.log(chalk.dim(err.message));
+        }
+    }
+}
+
+/**
  * Check if service is running
  */
 export function isServiceRunning(): boolean {
