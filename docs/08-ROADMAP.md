@@ -4,7 +4,7 @@ What's left to build to reach full ecosystem.
 
 ---
 
-## ✅ COMPLETE (Phase 1 & 2 - ~70%)
+## ✅ COMPLETE (Phase 1 & 2 - ~75%)
 
 ### Core Foundation
 - ✅ Gateway Server (WebSocket + HTTP)
@@ -17,6 +17,7 @@ What's left to build to reach full ecosystem.
 - ✅ Shell Tool (with safety)
 - ✅ Web Search (4 providers)
 - ✅ Memory Tools
+- ✅ **Subagent System** (research, writer, planner, critic, summarizer)
 - ✅ Telegram Bot
 - ✅ WhatsApp Bot
 - ✅ CLI REPL
@@ -33,7 +34,6 @@ What's left to build to reach full ecosystem.
 
 | Component | Status | Priority |
 |---|---|---|
-| **Subagents** | ❌ Prompts exist, no execution | P1 |
 | **Browser Control** | ❌ Schema exists, not implemented | P1 |
 | **Shadow Loop** | ❌ Schema exists, not implemented | P1 |
 | **Discord Bot** | ❌ Not implemented | P2 |

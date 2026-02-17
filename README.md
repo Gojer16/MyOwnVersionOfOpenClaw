@@ -62,7 +62,8 @@ Talk to Talon wherever you are:
 - **Smart Model Routing** — Uses cheapest capable model (DeepSeek → OpenRouter → OpenAI)
 - **Automatic Fallback** — If one provider fails, seamlessly switches to another
 - **Context Window Protection** — Prevents crashes from token overflow
-- **Tool Use** — Files, shell commands, web search, browser automation
+- **Subagent Delegation** — Delegates specialized tasks to cheap models (97% cost savings)
+- **Tool Use** — Files, shell commands, web search, browser automation, subagents
 - **Persistent Memory** — Remembers your preferences, projects, context
 - **State Machine** — PLAN → DECIDE → EXECUTE → EVALUATE → RESPOND
 
@@ -75,7 +76,22 @@ Talk to Talon wherever you are:
 | 🌐 **Web Search** | DeepSeek, OpenRouter, Tavily, DuckDuckGo | - |
 | 📄 **Web Fetch** | Extract content from URLs | Content cleaning |
 | 🧠 **Memory** | Read/write to memory system | User-controlled |
+| 🤖 **Subagents** | Delegate to specialized agents (research, writer, planner, critic, summarizer) | Cost-optimized |
 | 🔧 **More** | Browser automation, OS tools | Configurable permissions |
+
+### Subagent System
+
+Talon can delegate specialized tasks to lightweight subagents using cheap models:
+
+| Subagent | Purpose | Output Format |
+|----------|---------|---------------|
+| 🔍 **Research** | Gather information with sources | Findings + sources |
+| ✍️ **Writer** | Produce content (markdown/code/text) | Content + word count |
+| 📋 **Planner** | Create actionable plans | Steps + risks + timeline |
+| 🎯 **Critic** | Review work with feedback | Rating + strengths/weaknesses |
+| 📝 **Summarizer** | Compress information | Summary + key points |
+
+**Cost Savings:** Main agent uses gpt-4o ($5/1M tokens), subagents use gpt-4o-mini ($0.15/1M tokens) = **97% savings**
 
 ### CLI Features
 

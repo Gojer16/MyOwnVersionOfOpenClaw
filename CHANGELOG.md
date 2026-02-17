@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ New Features
 
+#### Subagent System
+- **SubagentRegistry**: Manages specialized subagent instances
+- **5 Subagent Types**:
+  - **Research**: Gathers information with structured findings and sources
+  - **Writer**: Produces content in markdown, code, or text formats
+  - **Planner**: Creates actionable plans with steps, risks, and time estimates
+  - **Critic**: Reviews work with ratings, strengths, weaknesses, and suggestions
+  - **Summarizer**: Compresses information into concise summaries with key points
+- **delegate_to_subagent Tool**: Agent can delegate specialized tasks to subagents
+- **Cost Optimization**: Subagents use cheap models (gpt-4o-mini) for 97% cost savings
+- **Config Support**: `agent.subagentModel` configuration option
+- **Full Integration**: Initialized in gateway Phase 3 with agent loop
+- **TDD Implementation**: All 19 unit tests passing
+
 #### TUI Client (`talon tui`)
 - **Interactive WebSocket Client**: Connect to running gateway without stopping/starting
 - **Real-time Chat**: Stream responses with typing indicators (⏳ Talon is thinking...)
