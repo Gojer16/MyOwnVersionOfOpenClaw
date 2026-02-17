@@ -180,13 +180,23 @@ function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket
             break;
 
         case 'status':
+        case 'reset':
+        case 'new':
+        case 'compact':
+        case 'tokens':
+        case 'model':
+        case 'config':
+        case 'memory':
+        case 'version':
+        case 'debug':
+            // Send to agent
             ws.send(JSON.stringify({
                 type: 'channel.message',
                 payload: {
                     channel: 'tui',
                     senderId: 'tui-user',
                     senderName: 'TUI User',
-                    text: 'Show my current session status',
+                    text: input,
                     media: null,
                     isGroup: false,
                     groupId: null,
@@ -214,15 +224,33 @@ function printBanner(): void {
 }
 
 function showHelp(): void {
-    console.log(chalk.bold.cyan('\n🦅 Talon TUI Commands\n'));
-    console.log(chalk.dim('System:'));
-    console.log('  /help        Show this help');
-    console.log('  /clear       Clear screen');
-    console.log('  /status      Show session status');
-    console.log('  /exit        Exit TUI');
+    console.log(chalk.bold.cyan('\n🦅 Talon CLI Commands'));
+    console.log(chalk.dim('──────────────────────────────────────────────────\n'));
+    
+    console.log(chalk.bold('Session'));
+    console.log('  /help       Show available commands');
+    console.log('  /status     Show session status and token usage');
+    console.log('  /reset      Reset the current session (clear history)');
+    console.log('  /new        Alias for /reset');
+    console.log('  /compact    Force memory compression');
+    console.log('  /tokens     Show estimated token usage');
     console.log('');
-    console.log(chalk.dim('Usage:'));
-    console.log('  Type your message and press Enter');
-    console.log('  Use ! prefix for shell commands (e.g., !ls -la)');
+    
+    console.log(chalk.bold('System'));
+    console.log('  /model      Show current model');
+    console.log('  /exit       Exit Talon');
+    console.log('  /quit       Alias for /exit');
+    console.log('  /config     View current Talon configuration');
+    console.log('  /memory     View recent memory entries');
+    console.log('  /version    Show Talon version and info');
+    console.log('  /debug      Toggle debug logging');
+    console.log('');
+    
+    console.log(chalk.bold('Tools'));
+    console.log('  /clear    Clear screen (keep history)');
+    console.log('');
+    
+    console.log(chalk.bold('Shell'));
+    console.log('  /!<command>    Execute bash command (e.g., !ls, !pwd)');
     console.log('');
 }
