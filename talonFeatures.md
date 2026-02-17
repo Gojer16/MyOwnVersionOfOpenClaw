@@ -1,6 +1,6 @@
 # Talon Features Guide
 
-> Complete reference of all features in Talon v0.2.1
+> Complete reference of all features in Talon v0.3.1
 
 ---
 
@@ -9,10 +9,27 @@
 1. [Channels](#channels)
 2. [AI Agent](#ai-agent)
 3. [Tools](#tools)
-4. [Memory System](#memory-system)
-5. [Configuration](#configuration)
-6. [Security](#security)
-7. [Providers](#providers)
+4. [Productivity Tools](#productivity-tools)
+5. [Apple Integrations](#apple-integrations)
+6. [Subagent System](#subagent-system)
+7. [Browser Control](#browser-control)
+8. [Shadow Loop](#shadow-loop)
+9. [Memory System](#memory-system)
+10. [Configuration](#configuration)
+11. [Security](#security)
+12. [Providers](#providers)
+
+---
+
+## Quick Stats
+
+- **Version:** 0.3.1
+- **Source Files:** 70
+- **Total Tools:** 26+
+- **Subagents:** 5
+- **Apple Tools:** 8 (macOS)
+- **Tests:** 323 (100% passing)
+- **Channels:** 3 (CLI, Telegram, WhatsApp)
 
 ---
 
@@ -292,6 +309,237 @@ Manage persistent memory:
 | **memory_search** | Search across memory files |
 | **soul_update** | Update SOUL.md (personality) |
 | **facts_update** | Update FACTS.json (user facts) |
+
+---
+
+## Productivity Tools
+
+Local tools for notes and task management.
+
+### Notes System
+
+Save and search markdown notes locally:
+
+| Tool | Description |
+|------|-------------|
+| **notes_save** | Save notes with title, content, and tags |
+| **notes_search** | Search notes by keyword or tag |
+
+**Features:**
+- Markdown format with frontmatter metadata
+- Tag-based organization
+- Stored in `~/.talon/workspace/notes/`
+- Automatic filename generation from title
+
+**Example:**
+```
+notes_save(
+  title="Meeting Notes",
+  content="Discussed Q1 goals...",
+  tags=["work", "meetings"]
+)
+```
+
+### Tasks System
+
+Todo list management with priorities:
+
+| Tool | Description |
+|------|-------------|
+| **tasks_add** | Add task with priority |
+| **tasks_list** | List tasks by status |
+| **tasks_complete** | Mark task as done |
+
+**Features:**
+- Priority levels: low, medium, high
+- Status tracking: pending, completed
+- JSON storage with IDs and timestamps
+- Stored in `~/.talon/workspace/tasks.json`
+
+**Example:**
+```
+tasks_add(
+  title="Review PR",
+  description="Check code changes",
+  priority="high"
+)
+```
+
+---
+
+## Apple Integrations
+
+Native macOS app integrations via AppleScript (macOS only).
+
+### Apple Notes
+
+Create and search notes in Apple Notes app:
+
+| Tool | Description |
+|------|-------------|
+| **apple_notes_create** | Create note in Apple Notes |
+| **apple_notes_search** | Search Apple Notes |
+
+**Features:**
+- Auto-creates "Talon" folder
+- Custom folder support
+- Native app integration
+- No setup required
+
+### Apple Reminders
+
+Manage reminders in Apple Reminders app:
+
+| Tool | Description |
+|------|-------------|
+| **apple_reminders_add** | Add reminder with due date |
+| **apple_reminders_list** | List reminders by list |
+| **apple_reminders_complete** | Mark reminder complete |
+
+**Features:**
+- Priority support (0-9)
+- Due date scheduling
+- Auto-creates "Talon" list
+- Completion status tracking
+
+### Apple Calendar
+
+Create and manage calendar events:
+
+| Tool | Description |
+|------|-------------|
+| **apple_calendar_create_event** | Create calendar event |
+| **apple_calendar_list_events** | List upcoming events |
+| **apple_calendar_delete_event** | Delete event by title |
+
+**Features:**
+- Date/time scheduling
+- Location and notes support
+- Auto-calculates end time (1 hour default)
+- Auto-creates "Talon" calendar
+- Configurable days ahead for listing
+
+**Platform:** macOS only (auto-detected)
+
+---
+
+## Subagent System
+
+Delegate specialized tasks to cheap models for 97% cost savings.
+
+### Available Subagents
+
+| Subagent | Purpose | Output Format |
+|----------|---------|---------------|
+| **research** | Gather information with sources | Findings + sources |
+| **writer** | Produce content (markdown/code/text) | Content + word count |
+| **planner** | Create actionable plans | Steps + risks + timeline |
+| **critic** | Review work with feedback | Rating + strengths/weaknesses |
+| **summarizer** | Compress information | Summary + key points |
+
+### Delegation Tool
+
+| Tool | Description |
+|------|-------------|
+| **delegate_to_subagent** | Delegate task to specialized agent |
+
+**Parameters:**
+- `type`: research, writer, planner, critic, summarizer
+- `description`: Task description
+- `context`: Optional context data
+
+**Cost Savings:**
+- Main agent: gpt-4o ($5/1M tokens)
+- Subagents: gpt-4o-mini ($0.15/1M tokens)
+- **Savings: 97%**
+
+**Configuration:**
+```json
+{
+  "agent": {
+    "subagentModel": "openrouter/openai/gpt-4o-mini"
+  }
+}
+```
+
+**Supported Models:**
+- `openrouter/openai/gpt-4o-mini` - $0.15/1M
+- `openrouter/google/gemini-flash-1.5` - $0.075/1M
+- `deepseek/deepseek-chat` - $0.14/1M
+
+---
+
+## Browser Control
+
+Automate browsers with Puppeteer.
+
+### Browser Tools
+
+| Tool | Description |
+|------|-------------|
+| **browser_navigate** | Open URL in browser |
+| **browser_click** | Click element by selector |
+| **browser_type** | Type text into input |
+| **browser_screenshot** | Capture page screenshot |
+| **browser_extract** | Extract page content |
+
+**Features:**
+- Headless/headed mode
+- Custom viewport sizes
+- Auto-launch browser
+- CSS selector support
+- Base64 screenshot encoding
+
+**Configuration:**
+```json
+{
+  "tools": {
+    "browser": {
+      "enabled": true,
+      "headless": true,
+      "defaultViewport": {
+        "width": 1280,
+        "height": 720
+      }
+    }
+  }
+}
+```
+
+---
+
+## Shadow Loop
+
+Proactive filesystem watching and suggestions.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Filesystem Watcher** | Monitors file changes with chokidar |
+| **Smart Heuristics** | Filters interesting events |
+| **Ghost Messages** | Proactive suggestions |
+| **Configurable** | Custom paths, ignore patterns |
+
+**Built-in Heuristics:**
+- New TypeScript file → "Need tests?"
+- TypeScript file changes → "Need help?"
+- Test file updates → "Test file updated"
+
+**Configuration:**
+```json
+{
+  "shadowLoop": {
+    "enabled": true,
+    "watchPaths": ["./src", "./tests"],
+    "ignorePatterns": ["node_modules", ".git", "dist"],
+    "cooldownMs": 5000,
+    "maxEventsPerMinute": 10
+  }
+}
+```
+
+**Test Coverage:** 85.8% (32 tests)
 
 ---
 
