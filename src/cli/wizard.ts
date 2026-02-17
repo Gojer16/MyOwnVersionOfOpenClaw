@@ -40,6 +40,9 @@ interface WizardResult {
             apiKey?: string;
         };
     };
+    hooks?: {
+        bootMd: boolean;
+    };
 }
 
 // ─── Banner ───────────────────────────────────────────────────────
@@ -282,6 +285,7 @@ async function stepWorkspace(): Promise<WizardResult['workspace']> {
         'AGENTS.md',
         'TOOLS.md',
         'HEARTBEAT.md',
+        'BOOT.md',
     ];
 
     for (const file of templateFiles) {
@@ -542,10 +546,32 @@ async function stepTools(): Promise<WizardResult['tools']> {
     };
 }
 
-// ─── Step 6: Health Check ─────────────────────────────────────────
+// ─── Step 6: Hooks ────────────────────────────────────────────────
+
+async function stepHooks(): Promise<{ bootMd: boolean }> {
+    console.log(chalk.bold.cyan('\n  Step 6/7: Hooks\n'));
+
+    const enableBootMd = await confirm({
+        message: '🚀 Enable boot-md? (Run BOOT.md on gateway startup)',
+        default: false,
+    });
+
+    if (enableBootMd) {
+        console.log(chalk.dim('  BOOT.md will be executed when Talon starts'));
+        console.log(chalk.dim('  Create ~/.talon/workspace/BOOT.md to customize startup behavior'));
+    }
+
+    console.log(chalk.green('  ✓ Hooks configured\n'));
+
+    return {
+        bootMd: enableBootMd,
+    };
+}
+
+// ─── Step 7: Health Check ─────────────────────────────────────────
 
 async function stepHealthCheck(config: WizardResult): Promise<void> {
-    console.log(chalk.bold.cyan('\n  Step 6/6: Health Check\n'));
+    console.log(chalk.bold.cyan('\n  Step 7/7: Health Check\n'));
 
     // Verify config was written
     if (fs.existsSync(CONFIG_PATH)) {
@@ -685,6 +711,13 @@ function saveConfig(result: WizardResult): void {
     // Workspace
     config.workspace = { root: result.workspace.root };
 
+    // Hooks
+    if (result.hooks?.bootMd) {
+        config.hooks = {
+            bootMd: { enabled: true },
+        };
+    }
+
     // Create backup if config exists
     if (fs.existsSync(CONFIG_PATH)) {
         const backupPath = `${CONFIG_PATH}.bak`;
@@ -736,8 +769,9 @@ export async function runWizard(): Promise<void> {
     const gateway = await stepGateway();
     const channels = await stepChannels();
     const tools = await stepTools();
+    const hooks = await stepHooks();
 
-    const result: WizardResult = { agent, gateway, channels, workspace, tools };
+    const result: WizardResult = { agent, gateway, channels, workspace, tools, hooks };
 
     // Save
     saveConfig(result);

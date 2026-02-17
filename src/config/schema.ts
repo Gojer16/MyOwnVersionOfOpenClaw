@@ -237,6 +237,14 @@ const WorkspaceSchema = z.object({
     skillsDir: z.string().default('skills'),
 });
 
+// ─── Hooks ────────────────────────────────────────────────────────
+
+const HooksSchema = z.object({
+    bootMd: z.object({
+        enabled: z.boolean().default(false),
+    }).default({}),
+});
+
 // ─── Root Config ──────────────────────────────────────────────────
 
 export const TalonConfigSchema = z.object({
@@ -249,6 +257,7 @@ export const TalonConfigSchema = z.object({
     security: SecuritySchema.default({}),
     ui: UISchema.default({}),
     workspace: WorkspaceSchema.default({}),
+    hooks: HooksSchema.default({}),
 });
 
 export type TalonConfig = z.infer<typeof TalonConfigSchema>;

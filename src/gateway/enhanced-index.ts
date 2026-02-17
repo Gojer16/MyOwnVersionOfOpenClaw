@@ -5,8 +5,10 @@
 // - Plugin system
 // - Cron service
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import chalk from 'chalk';
 import { loadConfig } from '../config/index.js';
 import { EventBus } from './events.js';
 import { SessionManager } from './sessions.js';
@@ -133,6 +135,9 @@ export class TalonGateway {
 
         // Print status
         this.printStatus();
+
+        // Run boot hook if enabled
+        await this.runBootHook();
 
         // Setup shutdown handlers
         this.setupShutdownHandlers();
@@ -404,6 +409,60 @@ export class TalonGateway {
   ║                                                  ║
   ╚══════════════════════════════════════════════════╝
   `);
+    }
+
+    /**
+     * Run boot hook if enabled
+     */
+    private async runBootHook(): Promise<void> {
+        if (!this.config.hooks?.bootMd?.enabled) {
+            return;
+        }
+
+        const bootMdPath = path.join(this.config.workspace.root, 'BOOT.md');
+        
+        if (!fs.existsSync(bootMdPath)) {
+            logger.warn({ path: bootMdPath }, 'BOOT.md not found, skipping boot hook');
+            return;
+        }
+
+        try {
+            logger.info('Running BOOT.md hook...');
+            const bootContent = fs.readFileSync(bootMdPath, 'utf-8');
+            
+            // Replace {{DATE}} placeholder with current date
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            const processedContent = bootContent.replace(/\{\{DATE\}\}/g, dateStr);
+
+            // Create a system session for boot
+            const bootSession = this.sessionManager.createSession(
+                'system',
+                'boot-hook',
+                'Boot Hook'
+            );
+
+            // Add boot content as system message
+            bootSession.messages.push({
+                id: `boot_${Date.now()}`,
+                role: 'system',
+                content: `[BOOT INSTRUCTIONS]\n\n${processedContent}`,
+                timestamp: Date.now(),
+            });
+
+            // Persist the session
+            this.sessionManager.persistSession(bootSession);
+
+            logger.info('✓ BOOT.md executed successfully');
+            console.log(chalk.green('  ✓ BOOT.md loaded'));
+        } catch (err) {
+            logger.error({ err, path: bootMdPath }, 'Failed to run BOOT.md');
+        }
     }
 
     /**
