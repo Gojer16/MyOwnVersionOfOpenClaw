@@ -3,6 +3,7 @@
 // ─── Talon CLI ────────────────────────────────────────────────────
 // Entry point for `talon setup`, `talon start`, `talon health`, `talon status`
 
+import fs from 'node:fs';
 import { runWizard } from './wizard.js';
 
 const command = process.argv[2];
@@ -98,15 +99,64 @@ Usage: talon <command>
 Commands:
   setup     Run the onboarding wizard
   start     Start the gateway server (add --daemon to run in background)
+  stop      Stop a running daemon
+  restart   Restart the daemon
   health    Check if the gateway is running
   status    Show detailed status and sessions
 
 Examples:
   talon setup          # First-time setup
-  talon start          # Start with interactive CLI
+  talon start         # Start with interactive CLI
   talon start --daemon # Start as background service
   talon health         # Quick health check
+  talon status        # Detailed status
       `);
+            break;
+        }
+
+        case 'stop': {
+            // Stop daemon via PID file
+            const { isDaemonRunning, getDaemonConfig, removePidFile } = await import('../scripts/daemon.js');
+            const config = getDaemonConfig();
+            
+            if (!isDaemonRunning(config)) {
+                console.log('Talon is not running as daemon');
+                break;
+            }
+            
+            try {
+                const pid = parseInt(fs.readFileSync(config.pidFile, 'utf-8').trim(), 10);
+                process.kill(pid, 'SIGTERM');
+                console.log('Talon stopping...');
+                setTimeout(() => {
+                    removePidFile(config);
+                    console.log('Talon stopped');
+                }, 2000);
+            } catch {
+                console.log('Failed to stop Talon');
+            }
+            break;
+        }
+
+        case 'restart': {
+            // Restart: stop then start
+            const { isDaemonRunning, getDaemonConfig, removePidFile, startDaemon } = await import('../scripts/daemon.js');
+            const config = getDaemonConfig();
+            
+            if (isDaemonRunning(config)) {
+                try {
+                    const pid = parseInt(fs.readFileSync(config.pidFile, 'utf-8').trim(), 10);
+                    process.kill(pid, 'SIGTERM');
+                    await new Promise(r => setTimeout(r, 2000));
+                } catch {
+                    // Ignore errors
+                }
+            }
+            
+            console.log('Starting Talon...');
+            process.argv = ['node', 'talon', 'start', '--daemon'];
+            await import('../gateway/index.js');
+            console.log('Talon restarted');
             break;
         }
 

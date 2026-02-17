@@ -33,6 +33,12 @@ interface WizardResult {
         discord: { enabled: boolean; botToken?: string; applicationId?: string };
     };
     workspace: { root: string };
+    tools: {
+        webSearch: {
+            provider: string;
+            apiKey?: string;
+        };
+    };
 }
 
 // ─── Banner ───────────────────────────────────────────────────────
@@ -421,10 +427,75 @@ async function stepChannels(): Promise<WizardResult['channels']> {
     };
 }
 
-// ─── Step 5: Health Check ─────────────────────────────────────────
+// ─── Step 5: Tools ─────────────────────────────────────────────────
+
+async function stepTools(): Promise<WizardResult['tools']> {
+    console.log(chalk.bold.cyan('\n  Step 5/6: Tools Configuration\n'));
+
+    // Web Search Provider
+    const useMainModel = await confirm({
+        message: 'Use the same LLM provider for web search?',
+        default: true,
+    });
+
+    let webSearchProvider = 'deepseek';
+    let webSearchApiKey: string | undefined;
+
+    if (!useMainModel) {
+        webSearchProvider = await select({
+            message: 'Choose web search provider:',
+            choices: [
+                { name: 'DeepSeek API (cheap, recommended)', value: 'deepseek' },
+                { name: 'OpenRouter (via DeepSeek/Grok)', value: 'openrouter' },
+                { name: 'Tavily (free tier available)', value: 'tavily' },
+                { name: 'DuckDuckGo (free, unreliable)', value: 'duckduckgo' },
+            ],
+        });
+
+        if (webSearchProvider === 'deepseek') {
+            const existingKey = process.env.DEEPSEEK_API_KEY;
+            if (existingKey) {
+                console.log(chalk.green('  ✓ Found DEEPSEEK_API_KEY'));
+                const useExisting = await confirm({ message: 'Use existing key?', default: true });
+                webSearchApiKey = useExisting ? existingKey : await password({ message: 'DeepSeek API key:' });
+            } else {
+                webSearchApiKey = await password({ message: 'DeepSeek API key:' });
+            }
+        } else if (webSearchProvider === 'openrouter') {
+            const existingKey = process.env.OPENROUTER_API_KEY;
+            if (existingKey) {
+                console.log(chalk.green('  ✓ Found OPENROUTER_API_KEY'));
+                const useExisting = await confirm({ message: 'Use existing key?', default: true });
+                webSearchApiKey = useExisting ? existingKey : await password({ message: 'OpenRouter API key:' });
+            } else {
+                webSearchApiKey = await password({ message: 'OpenRouter API key:' });
+            }
+        } else if (webSearchProvider === 'tavily') {
+            const existingKey = process.env.TAVILY_API_KEY;
+            if (existingKey) {
+                console.log(chalk.green('  ✓ Found TAVILY_API_KEY'));
+                const useExisting = await confirm({ message: 'Use existing key?', default: true });
+                webSearchApiKey = useExisting ? existingKey : await password({ message: 'Tavily API key:' });
+            } else {
+                webSearchApiKey = await password({ message: 'Tavily API key (get free at tavily.com):' });
+            }
+        }
+    }
+
+    console.log(chalk.green('  ✓ Tools configured\n'));
+
+    return {
+        webSearch: {
+            provider: webSearchProvider,
+            apiKey: webSearchApiKey,
+        },
+    };
+}
+
+// ─── Step 6: Health Check ─────────────────────────────────────────
 
 async function stepHealthCheck(config: WizardResult): Promise<void> {
-    console.log(chalk.bold.cyan('\n  Step 5/5: Health Check\n'));
+    console.log(chalk.bold.cyan('\n  Step 6/6: Health Check\n'));
 
     // Verify config was written
     if (fs.existsSync(CONFIG_PATH)) {
@@ -522,6 +593,32 @@ function saveConfig(result: WizardResult): void {
         config.channels = channels;
     }
 
+    // Tools
+    if (result.tools?.webSearch) {
+        const webSearchProvider = result.tools.webSearch.provider;
+        const webSearchApiKey = result.tools.webSearch.apiKey;
+
+        if (webSearchApiKey) {
+            const envVar = webSearchProvider === 'deepseek' ? 'DEEPSEEK_API_KEY'
+                : webSearchProvider === 'openrouter' ? 'OPENROUTER_API_KEY'
+                : webSearchProvider === 'tavily' ? 'TAVILY_API_KEY'
+                : null;
+
+            if (envVar) {
+                saveEnvVar(envVar, webSearchApiKey);
+            }
+        }
+
+        config.tools = {
+            web: {
+                search: {
+                    enabled: true,
+                    provider: webSearchProvider,
+                },
+            },
+        };
+    }
+
     // Workspace
     config.workspace = { root: result.workspace.root };
 
@@ -563,8 +660,9 @@ export async function runWizard(): Promise<void> {
     const workspace = await stepWorkspace();
     const gateway = await stepGateway();
     const channels = await stepChannels();
+    const tools = await stepTools();
 
-    const result: WizardResult = { agent, gateway, channels, workspace };
+    const result: WizardResult = { agent, gateway, channels, workspace, tools };
 
     // Save
     saveConfig(result);
