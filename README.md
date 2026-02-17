@@ -77,7 +77,31 @@ Talk to Talon wherever you are:
 | 📄 **Web Fetch** | Extract content from URLs | Content cleaning |
 | 🧠 **Memory** | Read/write to memory system | User-controlled |
 | 🤖 **Subagents** | Delegate to specialized agents (research, writer, planner, critic, summarizer) | Cost-optimized |
+| 📝 **Notes** | Save and search notes in markdown | Local storage |
+| ✅ **Tasks** | Todo list management with priorities | Local storage |
+| 🍎 **Apple Notes** | Create and search Apple Notes (macOS) | Native integration |
+| ⏰ **Apple Reminders** | Manage Apple Reminders (macOS) | Native integration |
+| 📅 **Apple Calendar** | Create and manage calendar events (macOS) | Native integration |
 | 🔧 **More** | Browser automation, OS tools | Configurable permissions |
+
+### Productivity Tools
+
+**Local Tools:**
+- **notes_save** - Save notes with tags to `~/.talon/workspace/notes/`
+- **notes_search** - Search notes by keyword or tag
+- **tasks_add** - Add tasks with priority levels (low/medium/high)
+- **tasks_list** - List tasks filtered by status
+- **tasks_complete** - Mark tasks as done
+
+**Apple Integrations (macOS only):**
+- **apple_notes_create** - Create notes in Apple Notes app
+- **apple_notes_search** - Search Apple Notes
+- **apple_reminders_add** - Add reminders with due dates and priority
+- **apple_reminders_list** - List reminders by list name
+- **apple_reminders_complete** - Mark reminders as complete
+- **apple_calendar_create_event** - Create calendar events with location and notes
+- **apple_calendar_list_events** - List upcoming events
+- **apple_calendar_delete_event** - Delete events by title
 
 ### Subagent System
 
