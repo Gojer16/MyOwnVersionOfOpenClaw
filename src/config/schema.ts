@@ -6,13 +6,13 @@ import { z } from 'zod';
 // ─── Gateway ──────────────────────────────────────────────────────
 
 const AuthSchema = z.object({
-    mode: z.enum(['none', 'password', 'token']).default('none'),
-    password: z.string().optional(),
+    mode: z.enum(['none', 'token']).default('none'),
     token: z.string().optional(),
     allowTailscale: z.boolean().default(false),
 });
 
 const TailscaleSchema = z.object({
+    enabled: z.boolean().default(false),
     mode: z.enum(['off', 'serve', 'funnel']).default('off'),
     resetOnExit: z.boolean().default(true),
 });

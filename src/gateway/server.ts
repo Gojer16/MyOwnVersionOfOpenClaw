@@ -29,6 +29,30 @@ export class TalonServer {
     // ─── Setup ──────────────────────────────────────────────────
 
     async setup(): Promise<void> {
+        // Auth middleware
+        if (this.config.gateway.auth.mode === 'token') {
+            this.fastify.addHook('onRequest', async (request, reply) => {
+                // Skip auth for health checks
+                if (request.url.startsWith('/api/health')) {
+                    return;
+                }
+
+                const token = this.config.gateway.auth.token;
+                if (!token) {
+                    logger.warn('Token auth enabled but no token configured');
+                    return;
+                }
+
+                const authHeader = request.headers.authorization;
+                const providedToken = authHeader?.replace('Bearer ', '');
+
+                if (providedToken !== token) {
+                    reply.code(401).send({ error: 'Unauthorized' });
+                    return;
+                }
+            });
+        }
+
         // CORS
         await this.fastify.register(cors, {
             origin: this.config.gateway.cors.origins,

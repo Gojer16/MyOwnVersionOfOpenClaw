@@ -26,11 +26,12 @@ interface WizardResult {
     gateway: {
         host: string;
         port: number;
-        auth: { mode: string };
+        auth: { mode: string; token?: string };
+        tailscale?: { enabled: boolean };
     };
     channels: {
         telegram: { enabled: boolean; botToken?: string };
-        discord: { enabled: boolean; botToken?: string; applicationId?: string };
+        whatsapp: { enabled: boolean; phoneNumber?: string };
     };
     workspace: { root: string };
     tools: {
@@ -46,17 +47,28 @@ interface WizardResult {
 
 function printBanner(): void {
     const now = new Date();
+    const hour = now.getHours();
     const timeString = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     const dateString = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
+    // Determine greeting based on time of day
+    let greeting = 'Hello!';
+    if (hour >= 5 && hour < 12) {
+        greeting = 'Good morning!';
+    } else if (hour >= 12 && hour < 17) {
+        greeting = 'Good afternoon!';
+    } else if (hour >= 17 && hour < 22) {
+        greeting = 'Good evening!';
+    } else {
+        greeting = 'Hello!';
+    }
+
     console.clear();
     console.log('');
-    console.log(chalk.bold.hex('#FF4500')('  Hello! Good morning! 🦞'));
+    console.log(chalk.bold.cyan(`  ${greeting} 🦅`));
     console.log('');
     console.log(chalk.dim(`  It is ${timeString} on ${dateString}.`));
     console.log(chalk.dim('  I am connecting to your local Talon instance...'));
-    console.log('');
-    console.log(chalk.cyan('  connected | idle'));
     console.log('');
 }
 
@@ -130,11 +142,9 @@ async function stepModelAuth(): Promise<WizardResult['agent']> {
 
     const providerChoices = [
         ...PROVIDERS.map(p => ({
-            name: `${p.name}  ${chalk.dim(p.description)}`,
+            name: p.name,
             value: p.id,
         })),
-        { name: `Custom Provider (OpenAI-compatible)  ${chalk.dim('Any provider with /v1/chat/completions')}`, value: 'custom-openai' },
-        { name: `Custom Provider (Anthropic-compatible)  ${chalk.dim('Any provider with /v1/messages')}`, value: 'custom-anthropic' },
         { name: chalk.dim('Skip for now'), value: 'skip' },
     ];
 
@@ -149,13 +159,6 @@ async function stepModelAuth(): Promise<WizardResult['agent']> {
             model: 'deepseek/deepseek-chat',
             providers: {},
         };
-    }
-
-    // Custom provider flow
-    if (providerId === 'custom-openai' || providerId === 'custom-anthropic') {
-        return await configureCustomProvider(
-            providerId === 'custom-openai' ? 'openai-compatible' : 'anthropic-compatible',
-        );
     }
 
     // Known provider flow
@@ -181,15 +184,35 @@ async function stepModelAuth(): Promise<WizardResult['agent']> {
     }
 
     // Pick default model
+    let modelChoices = provider.models.map(m => ({
+        name: `${m.name}  ${chalk.dim(m.id)}`,
+        value: m.id,
+    }));
+
+    // For OpenRouter, fetch all available models
+    if (providerId === 'openrouter') {
+        console.log(chalk.dim('  Fetching OpenRouter models...'));
+        const { fetchOpenRouterModels } = await import('./providers.js');
+        const openrouterModels = await fetchOpenRouterModels(apiKey);
+        
+        if (openrouterModels.length > 0) {
+            console.log(chalk.green(`  ✓ Found ${openrouterModels.length} models\n`));
+            modelChoices = openrouterModels.map(m => ({
+                name: `${m.name}  ${chalk.dim(m.id)}`,
+                value: m.id,
+            }));
+        } else {
+            console.log(chalk.yellow('  ⚠ Could not fetch models, using defaults\n'));
+        }
+    }
+
     const modelId = await select({
         message: 'Choose default model:',
         choices: [
-            ...provider.models.map(m => ({
-                name: `${m.name}  ${chalk.dim(m.id)}`,
-                value: m.id,
-            })),
+            ...modelChoices,
             { name: chalk.dim('Enter model ID manually'), value: '__custom__' },
         ],
+        pageSize: 15,
     });
 
     let finalModel: string;
@@ -221,53 +244,6 @@ async function stepModelAuth(): Promise<WizardResult['agent']> {
                 apiKey,
                 baseUrl: provider.baseUrl,
                 models: provider.models.map(m => m.id),
-            },
-        },
-    };
-}
-
-async function configureCustomProvider(
-    apiType: 'openai-compatible' | 'anthropic-compatible',
-): Promise<WizardResult['agent']> {
-    const endpointId = await input({
-        message: 'Endpoint ID (e.g. "my-local-llm"):',
-        default: 'custom',
-    });
-
-    const baseUrl = await input({
-        message: 'Base URL:',
-        default: apiType === 'openai-compatible'
-            ? 'http://localhost:11434/v1'
-            : 'https://api.example.com',
-    });
-
-    const apiKey = await password({
-        message: 'API key (leave empty if none):',
-    });
-
-    const modelId = await input({
-        message: 'Model ID:',
-        default: 'llama3.1:70b',
-    });
-
-    // Test it
-    console.log(chalk.dim('\n  Testing model connectivity...'));
-    const check = await checkModel(baseUrl, apiKey, modelId, apiType);
-
-    if (check.ok) {
-        console.log(chalk.green('  ✓ Model check passed!\n'));
-    } else {
-        console.log(chalk.red(`  ✗ Model check failed: ${check.error}`));
-        console.log(chalk.yellow('  Continuing anyway — you can fix this later.\n'));
-    }
-
-    return {
-        model: `${endpointId}/${modelId}`,
-        providers: {
-            [endpointId]: {
-                apiKey: apiKey || undefined,
-                baseUrl,
-                models: [modelId],
             },
         },
     };
@@ -332,6 +308,15 @@ async function stepWorkspace(): Promise<WizardResult['workspace']> {
 
 // ─── Step 3: Gateway ──────────────────────────────────────────────
 
+function generateToken(): string {
+    const chars = 'abcdef0123456789';
+    let token = '';
+    for (let i = 0; i < 48; i++) {
+        token += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return token;
+}
+
 async function stepGateway(): Promise<WizardResult['gateway']> {
     console.log(chalk.bold.cyan('\n  Step 3/5: Gateway\n'));
 
@@ -341,25 +326,45 @@ async function stepGateway(): Promise<WizardResult['gateway']> {
         validate: (v) => {
             const n = parseInt(v, 10);
             if (isNaN(n) || n < 1 || n > 65535) return 'Must be a valid port (1-65535)';
-            return true;
+            return undefined;
         },
     });
 
-    const host = await input({
-        message: 'Bind address:',
-        default: '127.0.0.1',
-    });
-
-    const authMode = await select({
-        message: 'Auth mode:',
+    const bindMode = await select({
+        message: 'Gateway bind mode:',
         choices: [
-            { name: `None  ${chalk.dim('(localhost only, trusted network)')}`, value: 'none' },
-            { name: `Password  ${chalk.dim('(required for remote access)')}`, value: 'password' },
-            { name: `Token  ${chalk.dim('(bearer token auth)')}`, value: 'token' },
+            { name: 'Loopback (Local only)', value: 'loopback' },
+            { name: 'All interfaces (0.0.0.0)', value: 'all' },
         ],
     });
 
-    if (host !== '127.0.0.1' && host !== 'localhost' && authMode === 'none') {
+    const host = bindMode === 'loopback' ? '127.0.0.1' : '0.0.0.0';
+
+    const authMode = await select({
+        message: 'Gateway auth:',
+        choices: [
+            { name: 'None', value: 'none' },
+            { name: 'Token', value: 'token' },
+        ],
+    });
+
+    let authToken: string | undefined;
+    if (authMode === 'token') {
+        const tokenInput = await input({
+            message: 'Gateway token (blank to generate):',
+            default: '',
+        });
+        authToken = tokenInput.trim() || generateToken();
+        console.log(chalk.green(`  ✓ Token: ${authToken}`));
+    }
+
+    // Tailscale exposure
+    const tailscaleEnabled = await confirm({
+        message: 'Tailscale exposure:',
+        default: false,
+    });
+
+    if (host !== '127.0.0.1' && authMode === 'none') {
         console.log(chalk.yellow('  ⚠  Non-loopback bind without auth is not recommended!'));
     }
 
@@ -368,7 +373,8 @@ async function stepGateway(): Promise<WizardResult['gateway']> {
     return {
         host,
         port: parseInt(port, 10),
-        auth: { mode: authMode },
+        auth: { mode: authMode, token: authToken },
+        tailscale: { enabled: tailscaleEnabled },
     };
 }
 
@@ -377,53 +383,97 @@ async function stepGateway(): Promise<WizardResult['gateway']> {
 async function stepChannels(): Promise<WizardResult['channels']> {
     console.log(chalk.bold.cyan('\n  Step 4/5: Channels\n'));
 
-    // Telegram
-    const enableTelegram = await confirm({
-        message: 'Enable Telegram?',
-        default: false,
-    });
+    const channelChoices = [
+        { name: 'Telegram (Bot API)', value: 'telegram', hint: 'Get token from @BotFather' },
+        { name: 'WhatsApp (QR link)', value: 'whatsapp', hint: 'Scan QR with phone' },
+        { name: chalk.dim('Finished'), value: 'done' },
+    ];
 
-    let telegramToken: string | undefined;
-    if (enableTelegram) {
-        const existingToken = process.env.TELEGRAM_BOT_TOKEN;
-        if (existingToken) {
-            console.log(chalk.green('  ✓ Found TELEGRAM_BOT_TOKEN in environment'));
-            const useExisting = await confirm({
-                message: 'Use existing token?',
-                default: true,
-            });
-            telegramToken = useExisting ? existingToken : await password({
-                message: 'Telegram bot token (from @BotFather):',
-            });
-        } else {
-            telegramToken = await password({
-                message: 'Telegram bot token (from @BotFather):',
-            });
+    const selectedChannels: string[] = [];
+    const channelConfigs: Record<string, any> = {};
+
+    // Loop until user selects "Finished"
+    while (true) {
+        const channel = await select({
+            message: 'Select a channel:',
+            choices: channelChoices.map(c => ({
+                ...c,
+                name: selectedChannels.includes(c.value) && c.value !== 'done'
+                    ? `● ${c.name} ${chalk.green('✓')}`
+                    : c.value === 'done'
+                    ? c.name
+                    : `○ ${c.name}`,
+            })),
+        });
+
+        if (channel === 'done') {
+            break;
+        }
+
+        // Skip if already configured
+        if (selectedChannels.includes(channel)) {
+            console.log(chalk.yellow(`  ⚠ ${channel} already configured`));
+            continue;
+        }
+
+        // Configure the selected channel
+        if (channel === 'telegram') {
+            const existingToken = process.env.TELEGRAM_BOT_TOKEN;
+            let token: string;
+
+            if (existingToken) {
+                console.log(chalk.green('  ✓ Found TELEGRAM_BOT_TOKEN in environment'));
+                const useExisting = await confirm({
+                    message: 'Use existing token?',
+                    default: true,
+                });
+                token = useExisting ? existingToken : await password({
+                    message: 'Telegram bot token (from @BotFather):',
+                });
+            } else {
+                token = await password({
+                    message: 'Telegram bot token (from @BotFather):',
+                });
+            }
+
+            channelConfigs.telegram = { enabled: true, botToken: token };
+            selectedChannels.push('telegram');
+            console.log(chalk.green('  ✓ Telegram configured\n'));
+        }
+
+        if (channel === 'whatsapp') {
+            const existingNumber = process.env.WHATSAPP_PHONE_NUMBER;
+            let phoneNumber: string;
+
+            if (existingNumber) {
+                console.log(chalk.green('  ✓ Found WHATSAPP_PHONE_NUMBER in environment'));
+                const useExisting = await confirm({
+                    message: 'Use existing number?',
+                    default: true,
+                });
+                phoneNumber = useExisting ? existingNumber : await input({
+                    message: 'WhatsApp phone number (international format, no +):',
+                    default: existingNumber,
+                });
+            } else {
+                console.log(chalk.dim('  Enter your phone number in international format (no + or spaces)'));
+                console.log(chalk.dim('  Example: 584128449024 for +58 412-844-9024'));
+                phoneNumber = await input({
+                    message: 'WhatsApp phone number:',
+                });
+            }
+
+            channelConfigs.whatsapp = { enabled: true, phoneNumber };
+            selectedChannels.push('whatsapp');
+            console.log(chalk.green('  ✓ WhatsApp configured\n'));
         }
     }
 
-    // Discord
-    const enableDiscord = await confirm({
-        message: 'Enable Discord?',
-        default: false,
-    });
-
-    let discordToken: string | undefined;
-    let discordAppId: string | undefined;
-    if (enableDiscord) {
-        discordToken = await password({
-            message: 'Discord bot token:',
-        });
-        discordAppId = await input({
-            message: 'Discord application ID:',
-        });
-    }
-
-    console.log(chalk.green('  ✓ Channels configured\n'));
+    console.log(chalk.green(`  ✓ ${selectedChannels.length} channel(s) configured\n`));
 
     return {
-        telegram: { enabled: enableTelegram, botToken: telegramToken },
-        discord: { enabled: enableDiscord, botToken: discordToken, applicationId: discordAppId },
+        telegram: channelConfigs.telegram || { enabled: false },
+        whatsapp: channelConfigs.whatsapp || { enabled: false },
     };
 }
 
@@ -445,10 +495,10 @@ async function stepTools(): Promise<WizardResult['tools']> {
         webSearchProvider = await select({
             message: 'Choose web search provider:',
             choices: [
-                { name: 'DeepSeek API (cheap, recommended)', value: 'deepseek' },
-                { name: 'OpenRouter (via DeepSeek/Grok)', value: 'openrouter' },
-                { name: 'Tavily (free tier available)', value: 'tavily' },
-                { name: 'DuckDuckGo (free, unreliable)', value: 'duckduckgo' },
+                { name: 'DeepSeek API', value: 'deepseek' },
+                { name: 'OpenRouter', value: 'openrouter' },
+                { name: 'Tavily', value: 'tavily' },
+                { name: 'DuckDuckGo', value: 'duckduckgo' },
             ],
         });
 
@@ -518,8 +568,8 @@ async function stepHealthCheck(config: WizardResult): Promise<void> {
     if (config.channels.telegram.enabled) {
         console.log(chalk.green('  ✓ Telegram enabled'));
     }
-    if (config.channels.discord.enabled) {
-        console.log(chalk.green('  ✓ Discord enabled'));
+    if (config.channels.whatsapp?.enabled) {
+        console.log(chalk.green('  ✓ WhatsApp enabled'));
     }
 
     console.log('');
@@ -562,11 +612,25 @@ function saveConfig(result: WizardResult): void {
     config.agent = agentConfig;
 
     // Gateway
-    config.gateway = {
+    const gatewayConfig: Record<string, unknown> = {
         host: result.gateway.host,
         port: result.gateway.port,
-        auth: result.gateway.auth,
+        auth: {
+            mode: result.gateway.auth.mode,
+            ...(result.gateway.auth.token && { token: '${TALON_GATEWAY_TOKEN}' }),
+        },
     };
+    
+    if (result.gateway.tailscale?.enabled) {
+        gatewayConfig.tailscale = { enabled: true };
+    }
+    
+    config.gateway = gatewayConfig;
+
+    // Save gateway token to env if provided
+    if (result.gateway.auth.token) {
+        saveEnvVar('TALON_GATEWAY_TOKEN', result.gateway.auth.token);
+    }
 
     // Channels
     const channels: Record<string, unknown> = {};
@@ -579,14 +643,13 @@ function saveConfig(result: WizardResult): void {
             saveEnvVar('TELEGRAM_BOT_TOKEN', result.channels.telegram.botToken);
         }
     }
-    if (result.channels.discord.enabled) {
-        channels.discord = {
+    if (result.channels.whatsapp.enabled) {
+        channels.whatsapp = {
             enabled: true,
-            botToken: '${DISCORD_BOT_TOKEN}',
-            applicationId: result.channels.discord.applicationId,
+            allowedUsers: ['${WHATSAPP_PHONE_NUMBER}'],
         };
-        if (result.channels.discord.botToken) {
-            saveEnvVar('DISCORD_BOT_TOKEN', result.channels.discord.botToken);
+        if (result.channels.whatsapp.phoneNumber) {
+            saveEnvVar('WHATSAPP_PHONE_NUMBER', result.channels.whatsapp.phoneNumber);
         }
     }
     if (Object.keys(channels).length > 0) {
@@ -622,8 +685,20 @@ function saveConfig(result: WizardResult): void {
     // Workspace
     config.workspace = { root: result.workspace.root };
 
+    // Create backup if config exists
+    if (fs.existsSync(CONFIG_PATH)) {
+        const backupPath = `${CONFIG_PATH}.bak`;
+        fs.copyFileSync(CONFIG_PATH, backupPath);
+    }
+
     // Write config
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+    
+    // Show feedback
+    console.log(chalk.green(`\n✓ Updated ${CONFIG_PATH}`));
+    if (fs.existsSync(`${CONFIG_PATH}.bak`)) {
+        console.log(chalk.dim(`  Backup saved to ${CONFIG_PATH}.bak`));
+    }
 }
 
 function saveEnvVar(key: string, value: string): void {

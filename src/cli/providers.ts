@@ -52,18 +52,6 @@ export const PROVIDERS: ProviderDef[] = [
         ],
         description: 'OpenAI\'s flagship models',
     },
-    {
-        id: 'anthropic',
-        name: 'Anthropic API',
-        envVar: 'ANTHROPIC_API_KEY',
-        baseUrl: 'https://api.anthropic.com',
-        apiType: 'anthropic-compatible',
-        models: [
-            { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', isDefault: true },
-            { id: 'claude-opus-4-0', name: 'Claude Opus 4' },
-        ],
-        description: 'Claude models — excellent reasoning and coding',
-    },
 ];
 
 export interface CustomProviderConfig {
@@ -73,6 +61,56 @@ export interface CustomProviderConfig {
     apiKey: string;
     apiType: 'openai-compatible' | 'anthropic-compatible';
     modelId: string;
+}
+
+export interface OpenRouterModel {
+    id: string;
+    name: string;
+    context_length?: number;
+    pricing?: {
+        prompt: string;
+        completion: string;
+    };
+}
+
+/**
+ * Fetch all available models from OpenRouter API
+ */
+export async function fetchOpenRouterModels(apiKey?: string): Promise<OpenRouterModel[]> {
+    try {
+        const res = await fetch('https://openrouter.ai/api/v1/models', {
+            headers: {
+                'Accept': 'application/json',
+                ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
+            },
+            signal: AbortSignal.timeout(30_000),
+        });
+
+        if (!res.ok) {
+            console.error(`Failed to fetch OpenRouter models: HTTP ${res.status}`);
+            return [];
+        }
+
+        const data = await res.json() as { data?: unknown[] };
+        if (!Array.isArray(data.data)) {
+            return [];
+        }
+
+        return data.data
+            .filter((entry): entry is Record<string, unknown> => 
+                typeof entry === 'object' && entry !== null && typeof (entry as Record<string, unknown>).id === 'string'
+            )
+            .map(entry => ({
+                id: entry.id as string,
+                name: (typeof entry.name === 'string' ? entry.name : entry.id) as string,
+                context_length: typeof entry.context_length === 'number' ? entry.context_length : undefined,
+                pricing: entry.pricing as OpenRouterModel['pricing'],
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    } catch (err) {
+        // Silently fail - wizard will use defaults
+        return [];
+    }
 }
 
 /**

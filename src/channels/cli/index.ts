@@ -306,6 +306,10 @@ export class CliChannel extends BaseChannel {
         console.log('');
         console.log(prefix + cleanText);
         
+        // Show model indicator
+        const modelName = this.currentModel.split('/').pop() || this.currentModel;
+        console.log(chalk.dim(`  [${chalk.yellow(modelName)}]`));
+        
         // Show error details in debug mode
         if (isError && message.metadata?.errorDetails) {
             console.log(chalk.gray(`  🔧 ${String(message.metadata.errorDetails).substring(0, 100)}...`));
