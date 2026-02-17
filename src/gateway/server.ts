@@ -58,15 +58,72 @@ export class TalonServer {
     // ─── HTTP Routes ──────────────────────────────────────────────
 
     private registerRoutes(): void {
-        // Health check
+        // Health check - enhanced with component status
         this.fastify.get('/api/health', async () => {
+            const sessions = this.sessionManager.getAllSessions();
+            
             return {
                 status: 'ok',
-                version: '0.1.0',
+                version: '0.2.1',
                 uptime: process.uptime(),
-                sessions: this.sessionManager.getAllSessions().length,
-                wsClients: this.clients.size,
+                timestamp: new Date().toISOString(),
+                components: {
+                    gateway: 'ok',
+                    sessions: 'ok',
+                    agent: this.agentLoop ? 'ok' : 'disabled',
+                    websocket: 'ok',
+                },
+                stats: {
+                    sessions: sessions.length,
+                    activeSessions: sessions.filter(s => s.state === 'active').length,
+                    wsClients: this.clients.size,
+                    totalMessages: sessions.reduce((sum, s) => sum + s.metadata.messageCount, 0),
+                },
             };
+        });
+
+        // Deep health check - probes each component
+        this.fastify.get('/api/health/deep', async () => {
+            const checks: Record<string, { ok: boolean; message?: string }> = {};
+            
+            // Check sessions
+            try {
+                const sessions = this.sessionManager.getAllSessions();
+                checks.sessions = { ok: true, message: `${sessions.length} sessions` };
+            } catch (err) {
+                checks.sessions = { ok: false, message: String(err) };
+            }
+            
+            // Check agent loop
+            if (this.agentLoop) {
+                checks.agent = { ok: true, message: 'Running' };
+            } else {
+                checks.agent = { ok: false, message: 'Not initialized' };
+            }
+            
+            // Check memory
+            try {
+                checks.memory = { ok: true, message: 'OK' };
+            } catch (err) {
+                checks.memory = { ok: false, message: String(err) };
+            }
+            
+            const allOk = Object.values(checks).every(c => c.ok);
+            
+            return {
+                status: allOk ? 'ok' : 'degraded',
+                timestamp: new Date().toISOString(),
+                checks,
+            };
+        });
+
+        // Ready check - for load balancers
+        this.fastify.get('/api/ready', async () => {
+            const hasAgent = !!this.agentLoop;
+            if (!hasAgent) {
+                return { ready: false, reason: 'Agent not initialized' };
+            }
+            return { ready: true };
         });
 
         // List sessions

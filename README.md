@@ -4,111 +4,483 @@
 
 Inspired by [OpenClaw](https://openclaw.ai/) — rebuilt from scratch as a privacy-first, single-user AI assistant with proactive intelligence.
 
----
-
-## What is Talon?
-
-Talon is a **local-first personal AI assistant** you run on your own Mac, PC, or server. It connects to your messaging apps (Telegram, Discord, WebChat), has full access to your filesystem and shell, can browse the web, and remembers everything about you across sessions.
-
-### Key Features
-
-| Feature | Description |
-|---|---|
-| 🔒 **Privacy First** | Runs locally — your data never leaves your machine |
-| 💬 **Multi-Channel** | Telegram, Discord, WebChat, CLI — same AI everywhere |
-| 📁 **Full System Access** | Read/write files, run commands, browse the web |
-| 🧠 **Persistent Memory** | Remembers your preferences, projects, and context |
-| 👻 **Shadow Loop** | Watches your filesystem and proactively suggests fixes |
-| 🎭 **Evolving Persona** | A "Soul" that adapts to your style and values |
-| 🔧 **Extensible** | Skills and plugins for custom capabilities |
+**Version:** 0.3.0  
+**Status:** Enterprise architecture with protocol layer, plugins, cron scheduling & enhanced CLI
 
 ---
 
-## Architecture
+## ✨ What Makes Talon Different
 
+Unlike cloud-based AI assistants, Talon:
+- 🔒 **Runs entirely on your machine** — your data never leaves
+- 💬 **Integrates with your existing apps** — Telegram, WhatsApp, CLI
+- 🧠 **Remembers everything** — persistent memory across sessions
+- 🛠️ **Has full system access** — files, shell, browser (with your permission)
+- 📱 **Works everywhere** — same AI on all your devices
+
+---
+
+## 🚀 Features
+
+### Multi-Channel Communication
+
+Talk to Talon wherever you are:
+
+| Channel | Status | Features |
+|---------|--------|----------|
+| **💻 CLI** | ✅ Enhanced | Interactive terminal with slash commands, bash execution, skill command registration, command suggestions, better help formatting |
+| **📱 WhatsApp** | ✅ Ready | Full WhatsApp Web integration, QR auth, groups |
+| **✈️ Telegram** | ✅ Ready | Bot integration, polling, user/group authorization |
+| **🌐 Web UI** | 🚧 Planned | Browser dashboard (coming in v0.3.0) |
+
+### 🏗️ Core Architecture
+
+#### Health Checks
+- **Basic Health** (`GET /api/health`) - Version, uptime, sessions, WebSocket clients
+- **Deep Probe** (`GET /api/health/deep`) - Component-level health checks
+- **Ready Check** (`GET /api/ready`) - For load balancers
+
+#### Config Hot Reload
+- **Automatic Reload** - Watches config file for changes
+- **Debounced Updates** - 300ms debounce prevents rapid reloads
+- **Event Emission** - Notifies components on config change
+
+#### Daemon Mode
+- **Background Running** - Run as system service
+- **PID File Management** - Track running process
+- **Platform Support** - macOS (launchd), Linux (systemd)
+- **Service Generation** - Auto-generate service files
+
+#### Gateway Server
+- **Fastify HTTP** - REST API on port 19789
+- **WebSocket** - Real-time messaging at `/ws`
+- **Session Management** - Create, resume, persist sessions
+- **Event Bus** - Pub/sub for internal communication
+
+### AI Agent Capabilities
+
+- **Smart Model Routing** — Uses cheapest capable model (DeepSeek → OpenRouter → OpenAI)
+- **Automatic Fallback** — If one provider fails, seamlessly switches to another
+- **Context Window Protection** — Prevents crashes from token overflow
+- **Tool Use** — Files, shell commands, web search, browser automation
+- **Persistent Memory** — Remembers your preferences, projects, context
+- **State Machine** — PLAN → DECIDE → EXECUTE → EVALUATE → RESPOND
+
+### Tools Available
+
+| Tool | Description | Safety |
+|------|-------------|--------|
+| 📁 **File** | Read, write, search files | Path validation, size limits |
+| 🐚 **Shell** | Execute commands | Timeout, blocked commands, confirmation |
+| 🌐 **Web Search** | DeepSeek, OpenRouter, Tavily, DuckDuckGo | - |
+| 📄 **Web Fetch** | Extract content from URLs | Content cleaning |
+| 🧠 **Memory** | Read/write to memory system | User-controlled |
+| 🔧 **More** | Browser automation, OS tools | Configurable permissions |
+
+### CLI Features
+
+```bash
+# Interactive chat with slash commands
+You > /help
+🦅 Talon CLI Commands
+
+System:
+  /config      View Talon configuration
+  /version     Show version info
+  /debug       Toggle debug logging
+  /model       Show current model
+  /exit        Exit Talon
+  /quit        Alias for /exit
+
+Session:
+  /help        Show available commands
+  /status      Show session status and metrics
+  /reset       Clear session history
+  /new         Alias for /reset
+  /tokens      Show estimated token usage
+  /compact     Trigger memory compression
+  /clear       Clear screen
+  /memory      View recent memory files
+
+Skills:
+  /time        Show current date and time
+  /echo        Echo back input text
+  /calc        Simple calculator (e.g., /calc 2+2)
+
+# Bash execution
+You > !ls -la
+$ ls -la
+drwxr-xr-x  24 user  staff   768 Feb 16 17:01 .
+
+# Regular chat with tool usage
+You > What's the weather in Tokyo?
+🦅 Talon > Let me check that for you...
+  🛠️  Using web_search...
+🦅 Talon > The weather in Tokyo is currently 18°C and sunny...
+💰 150 → 200 = 350 tokens (DeepSeek)
+
+# Check configuration
+You > /config
+⚙️  Talon Configuration
+  Workspace:   /Users/orlando/.talon/workspace
+  Model:       deepseek/deepseek-chat
+  Gateway:     127.0.0.1:19789
+  Channels:    CLI ✅, Telegram ❌, WhatsApp ❌, WebChat ✅
+
+# Check version
+You > /version
+🦅 Talon
+  Version:    0.3.0
+  Name:       talon
+  Node:       v22.10.0
+  Platform:   darwin arm64
+  Uptime:     2h 35m
+  Providers:   ✅ DeepSeek, OpenRouter
+  Sessions:    5 active
+  Gateway:     ✅ Running
+
+# Command suggestions for mistyped commands
+You > /helpp
+🦅 Did you mean /help? Type /help to see all commands.
+
+# Clear screen with welcome banner
+You > /clear
+
+╔══════════════════════════════════════╗
+║                                      ║
+║   🦅  T A L O N   v0.3.0            ║
+║                                      ║
+║   Personal AI Assistant              ║
+║   Inspired by OpenClaw               ║
+║                                      ║
+╚══════════════════════════════════════╝
+
+# When errors occur, Talon handles them gracefully with specific messages:
+# • "I'm having trouble with the conversation context..." - Context issues
+# • "It looks like there's an issue with your API key..." - Billing/quota
+# • "I'm being rate limited..." - Rate limit errors
+# • "The request timed out..." - Timeout errors
+# • "Network error..." - Connection issues
+# • Generic fallback message for other errors
+╔══════════════════════════════════════╗
+║                                      ║
+║   🦅  T A L O N   v0.3.0            ║
+║                                      ║
+║   Personal AI Assistant              ║
+║   Inspired by OpenClaw               ║
+║                                      ║
+╚══════════════════════════════════════╝
+
+# Skill commands example
+You > /time
+📅 Current time: Monday, February 16, 2026, 22:52:00 GMT-4
+
+You > /calc 15 * 3
+🧮 Result: 45
+
+You > /echo Hello World!
+📢 Hello World!
 ```
-Telegram · Discord · WebChat · CLI
-               │
-               ▼
-     ┌─────────────────────┐
-     │   Talon Gateway   │ ← ws://127.0.0.1:19789
-     └──────────┬──────────┘
-                │
-    ┌───────────┼───────────────┐
-    ▼           ▼               ▼
-  Agent       Sub-Agent      Memory
-  Loop        Manager        Manager
-  (State      (Research,     (Compression
-  Machine)    Planner,       + Context
-    │         Writer,         Control)
-    │         Critic)
-    │
-    ├── Model Router (cheapest model per task)
-    ├── Tool Runner (Files · Shell · Browser · OS)
-    └── Shadow Loop (Proactive observation)
 ```
+
+### Security & Privacy
+
+- **Local First** — Everything runs on your machine
+- **Secure Config** — API keys in `.env`, never committed
+- **Data Separation** — Personal data in `~/.talon/` (gitignored)
+- **Authorization** — Whitelist users/channels per platform
+- **Sandboxing** — Optional Docker sandbox for dangerous operations
 
 ---
 
-## Documentation
+## 📦 Installation
+
+### Prerequisites
+
+- **Node.js 22+** ([download](https://nodejs.org/))
+- **npm** (comes with Node)
+- **Git** ([download](https://git-scm.com/))
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/talon.git
+cd talon
+
+# Install dependencies
+npm install
+
+# Install WhatsApp support (optional, heavy)
+npm install whatsapp-web.js qrcode-terminal
+
+# Run secure setup wizard
+npm run setup:secure
+
+# Start Talon
+npm start
+```
+
+### Setup Wizard
+
+The setup wizard will:
+1. Create `~/.talon/.env` for your API keys
+2. Create `~/.talon/config.json` for configuration
+3. Copy template files to `~/.talon/workspace/`
+4. Configure your preferred LLM provider
+
+### CLI Commands
+
+```bash
+talon setup          # First-time setup wizard
+talon start          # Start with interactive CLI
+talon start --daemon # Start in background
+talon stop           # Stop running daemon
+talon restart        # Restart daemon
+talon health         # Quick health check
+talon status         # Detailed status
+```
+5. Set up your phone number for WhatsApp
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables (`~/.talon/.env`)
+
+```bash
+# LLM Providers (required)
+DEEPSEEK_API_KEY=sk-your-key-here
+OPENROUTER_API_KEY=sk-or-your-key-here
+
+# Channels (optional)
+TELEGRAM_BOT_TOKEN=123456:ABC-your-token
+WHATSAPP_PHONE_NUMBER=1234567890
+
+# Security (optional)
+TALON_TOKEN=your-auth-token
+```
+
+### Config File (`~/.talon/config.json`)
+
+```json
+{
+  "agent": {
+    "model": "deepseek/deepseek-chat",
+    "providers": {
+      "deepseek": {
+        "apiKey": "${DEEPSEEK_API_KEY}",
+        "models": ["deepseek-chat"]
+      }
+    }
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "allowedUsers": ["${WHATSAPP_PHONE_NUMBER}"]
+    },
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}"
+    }
+  }
+}
+```
+
+**Note:** Use `${ENV_VAR}` syntax for secrets. They'll be replaced at runtime.
+
+---
+
+## 📚 Documentation
 
 | Document | Description |
-|---|---|
-| [Vision](docs/00-VISION.md) | Project identity, principles, and relationship to OpenClaw |
-| [Architecture](docs/01-ARCHITECTURE.md) | System architecture, data flow, directory structure, tech stack |
-| [Components](docs/02-COMPONENTS.md) | Detailed specs with TypeScript interfaces for every subsystem |
-| [Tools & Capabilities](docs/03-TOOLS-AND-CAPABILITIES.md) | All 17 built-in tools with parameters and security notes |
-| [Channels & Interfaces](docs/04-CHANNELS-AND-INTERFACES.md) | Channel specs, Web UI, chat commands, message formatting |
-| [Memory & Persona](docs/05-MEMORY-AND-PERSONA.md) | 4-tier memory, Soul system, fact store, context management |
-| [Security](docs/06-SECURITY.md) | Tool safety, access control, sandboxing, audit logging |
-| [Configuration](docs/07-CONFIGURATION.md) | Full config reference, env vars, deployment patterns |
-| [Roadmap](docs/08-ROADMAP.md) | 4-phase implementation plan with deliverables and decisions |
+|----------|-------------|
+| [Vision](docs/00-VISION.md) | Project identity and principles |
+| [Architecture](docs/01-ARCHITECTURE.md) | System design and data flow |
+| [Architecture Enhancements](docs/ARCHITECTURE_ENHANCEMENTS.md) | **🏗️ v0.3.0 architecture overview** |
+| [Components](docs/02-COMPONENTS.md) | Detailed component specs |
+| [Tools](docs/03-TOOLS-AND-CAPABILITIES.md) | All 17+ built-in tools |
+| [Channels](docs/04-CHANNELS-AND-INTERFACES.md) | Channel configuration |
+| [Memory](docs/05-MEMORY-AND-PERSONA.md) | Memory system and persona |
+| [Security](docs/SECURITY.md) | **🔐 Secure configuration guide** |
+| [Repo Security](docs/REPOSITORY_SECURITY.md) | Open source security |
+| [Config](docs/07-CONFIGURATION.md) | Full configuration reference |
+| [Roadmap](docs/08-ROADMAP.md) | Future plans |
+| [Changelog](CHANGELOG.md) | Version history |
+| [Features](docs/TALON_FEATURES.md) | Complete feature catalog |
+| [OpenClaw Comparison](docs/OPENCLAW_FEATURES.md) | Comparison with OpenClaw |
 
 ---
 
-## Tech Stack
+## 🏗️ Architecture (v0.3.0)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     USER INTERFACES                              │
+│  Telegram · WhatsApp · CLI · Plugins · (Web UI coming soon)     │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     PROTOCOL LAYER                               │
+│  WebSocket · REST API · Gateway Frames · Zod Validation         │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     TALON GATEWAY                                │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
+│  │   Server     │ │   Sessions   │ │    Events    │            │
+│  │  (Fastify)   │ │  (Key Store) │ │    (Bus)     │            │
+│  └──────────────┘ └──────────────┘ └──────────────┘            │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
+│  │   Plugins    │ │     Cron     │ │   Protocol   │            │
+│  │   (Loader)   │ │  (Scheduler) │ │   (Handler)  │            │
+│  └──────────────┘ └──────────────┘ └──────────────┘            │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       AGENT CORE                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  Agent Loop  │  │ Model Router │  │Context Guard │          │
+│  │(State Machine│  │ (Fallback)   │  │(Token Mgmt)  │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+          ┌────────────────┼────────────────┐
+          ▼                ▼                ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│    TOOLS     │  │    MEMORY    │  │   PROVIDERS  │
+│  · File      │  │ · Short-term │  │ · DeepSeek   │
+│  · Shell     │  │ · Long-term  │  │ · OpenRouter │
+│  · Web       │  │ · Facts      │  │ · OpenAI     │
+│  · Memory    │  │ · Compress   │  │ · Custom     │
+└──────────────┘  └──────────────┘  └──────────────┘
+```
+
+---
+
+## 🛠️ Tech Stack
 
 | Layer | Technology |
-|---|---|
-| Runtime | Node.js 22+ |
-| Language | TypeScript 5.5+ |
-| LLM | Anthropic Claude (primary), OpenAI, Ollama |
-| Telegram | grammY |
-| Discord | discord.js v14 |
-| Browser | Playwright |
-| UI | React + Vite |
-| Config | Zod validation |
-| Storage | JSON files (MVP), SQLite (future) |
+|-------|------------|
+| **Runtime** | Node.js 22+ |
+| **Language** | TypeScript 5.7+ |
+| **Server** | Fastify 5.x |
+| **Protocol** | WebSocket, Zod validation |
+| **AI/LLM** | OpenAI SDK, custom providers |
+| **Validation** | Zod (schemas + runtime) |
+| **Logging** | Pino |
+| **Terminal** | Chalk, Inquirer |
+| **Testing** | Vitest |
+| **Channels** | whatsapp-web.js, node-fetch |
+| **Plugins** | Dynamic loader, hot reload |
+| **Cron** | Native scheduler |
 
 ---
 
-## Project Status
- 
-✅ **Phase 1 MVP Complete** — Core agent, memory, tools, and channels are implemented.
- 
-### Getting Started
- 
-1. **Setup:**
-   ```bash
-   npm install
-   npm run setup
-   ```
-   Follow the wizard to configure your LLM provider (DeepSeek, OpenRouter, etc.) and workspace.
- 
-2. **Start:**
-   ```bash
-   npm start
-   ```
-   This launches the Gateway and the CLI REPL.
- 
-3. **Chat:**
-   - Type in the CLI to talk to Talon.
-   - Or connect via Telegram if configured.
- 
-See [docs/07-CONFIGURATION.md](docs/07-CONFIGURATION.md) for advanced config.
+## 📝 Commands
+
+```bash
+# Development
+npm run dev              # Start with hot reload
+npm run build            # Compile TypeScript
+npm test                 # Run tests
+
+# CLI Commands
+npm start                # Start Talon gateway + CLI
+npm run setup            # Interactive setup wizard
+npm run setup:secure     # Secure setup with env vars
+npm run health           # Check gateway health
+
+# Options
+npm start -- --daemon    # Run in background
+npm start -- --port 8080 # Custom port
+```
 
 ---
 
-## License
+## 🔐 Security First
 
-TBD
+**Before you start**, read:
+- [docs/SECURITY.md](docs/SECURITY.md) — How to configure securely
+- [docs/REPOSITORY_SECURITY.md](docs/REPOSITORY_SECURITY.md) — Open source safety
+
+**Key Points:**
+- API keys go in `~/.talon/.env` (never committed)
+- Personal data goes in `~/.talon/workspace/` (gitignored)
+- Templates in `templates/workspace/` are generic and safe
+- Each user gets their own copy of workspace files
+
+---
+
+## 🗺️ Roadmap
+
+### ✅ v0.3.0 (Current) - Enterprise Architecture
+- **Protocol Layer** - Structured message protocol with Zod validation
+- **Session Key System** - Sophisticated session identification and management
+- **Plugin Architecture** - Dynamic loading, channel plugins, tool extensions
+- **Cron Scheduler** - Background tasks, job scheduling, event-driven execution
+- **Enhanced Gateway** - 8-phase boot, comprehensive status reporting
+- Multi-channel (Telegram, WhatsApp, CLI, Plugin Channels)
+- Model fallback system with automatic retries
+- Context window protection with smart truncation
+- Secure configuration with data separation
+
+### 🚧 v0.4.0 (Planned)
+- Web dashboard UI (React-based)
+- Multi-agent support
+- Browser automation tools
+- Advanced memory features
+
+### 🔮 v1.0.0 (Future)
+- Stable API
+- Plugin marketplace
+- Mobile apps
+- Enterprise features
+- Calendar integration
+- Email integration
+- SQLite memory storage
+
+### 🔮 v1.0.0 (Future)
+- Stable API
+- Plugin marketplace
+- Mobile apps
+- Enterprise features
+
+See [docs/08-ROADMAP.md](docs/08-ROADMAP.md) for full details.
+
+---
+
+## 🤝 Contributing
+
+This is a personal project, but suggestions and feedback are welcome!
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing`)
+5. Open a Pull Request
+
+**Note:** Never commit personal data. See [security guide](docs/REPOSITORY_SECURITY.md).
+
+---
+
+## 📄 License
+
+MIT License - See LICENSE file
+
+---
+
+## 🙏 Acknowledgments
+
+- Inspired by [OpenClaw](https://openclaw.ai/)
+- Built with [Node.js](https://nodejs.org/), [TypeScript](https://www.typescriptlang.org/), [Fastify](https://www.fastify.io/)
+- WhatsApp integration via [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js)
+
+---
+
+**Made with ❤️ for personal AI freedom**
+
+[Changelog](CHANGELOG.md) · [Documentation](docs/) · [Issues](https://github.com/yourusername/talon/issues)

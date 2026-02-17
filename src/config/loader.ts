@@ -68,11 +68,20 @@ export function ensureRuntimeDirs(): void {
 }
 
 /**
- * Copy default workspace files if they don't exist.
+ * Copy default workspace files from templates if they don't exist.
  * Seeds the full workspace template suite on first run.
+ * 
+ * SECURITY: Templates are generic and safe to commit.
+ * The copied files in ~/.talon/workspace/ contain personal data and must NOT be committed.
  */
 export function ensureWorkspaceDefaults(sourceDir: string): void {
     const workspaceDir = path.join(TALON_HOME, 'workspace');
+
+    // Ensure workspace directory exists
+    if (!fs.existsSync(workspaceDir)) {
+        fs.mkdirSync(workspaceDir, { recursive: true });
+        logger.info(`Created workspace directory: ${workspaceDir}`);
+    }
 
     // Ensure memory subdirectory
     const memoryDir = path.join(workspaceDir, 'memory');
@@ -81,25 +90,33 @@ export function ensureWorkspaceDefaults(sourceDir: string): void {
     }
 
     const defaults = [
-        'SOUL.md',        // Identity and personality
-        'USER.md',        // Info about the human
-        'TOOLS.md',       // Environment-specific tool notes
-        'IDENTITY.md',    // Agent's self-chosen identity
-        'BOOTSTRAP.md',   // First-run onboarding ritual
-        'AGENTS.md',      // Operating manual
-        'MEMORY.md',      // Long-term curated memory
-        'HEARTBEAT.md',   // Heartbeat poll checklist
-        'FACTS.json',     // Structured facts
+        { file: 'SOUL.md', description: 'AI personality and soul' },
+        { file: 'USER.md', description: 'Information about you' },
+        { file: 'TOOLS.md', description: 'Environment-specific tool notes' },
+        { file: 'IDENTITY.md', description: "Agent's self-chosen identity" },
+        { file: 'BOOTSTRAP.md', description: 'First-run onboarding ritual' },
+        { file: 'AGENTS.md', description: 'Operating manual' },
+        { file: 'MEMORY.md', description: 'Long-term curated memory' },
+        { file: 'HEARTBEAT.md', description: 'Heartbeat poll checklist' },
+        { file: 'FACTS.json', description: 'Structured facts about you' },
     ];
 
-    for (const file of defaults) {
+    let copiedCount = 0;
+    for (const { file, description } of defaults) {
         const target = path.join(workspaceDir, file);
         const source = path.join(sourceDir, file);
 
         if (!fs.existsSync(target) && fs.existsSync(source)) {
             fs.copyFileSync(source, target);
-            logger.info(`Copied default ${file} to workspace`);
+            copiedCount++;
+            logger.info(`Copied ${file} to workspace (${description})`);
         }
+    }
+
+    if (copiedCount > 0) {
+        logger.info(`\n⚠️  IMPORTANT: ${copiedCount} template files copied to ~/.talon/workspace/`);
+        logger.info('   These files will contain YOUR PERSONAL DATA as the AI learns about you.');
+        logger.info('   NEVER commit the ~/.talon/ directory to Git!\n');
     }
 }
 

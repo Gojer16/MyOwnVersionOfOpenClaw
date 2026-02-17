@@ -1,6 +1,6 @@
 {
     "name": "talon",
-    "version": "0.1.0",
+    "version": "0.3.0",
     "description": "Personal AI assistant — local-first, multi-channel, with agent loop and memory compression",
     "type": "module",
     "main": "dist/gateway/index.js",
@@ -13,6 +13,7 @@
         "prestart": "npm run build",
         "start": "NODE_ENV=production node dist/cli/index.js start",
         "setup": "tsx src/cli/index.ts setup",
+        "setup:secure": "node scripts/setup-secure.js",
         "health": "tsx src/cli/index.ts health",
         "test": "vitest run",
         "test:watch": "vitest"
@@ -27,15 +28,20 @@
         "chalk": "^5.6.2",
         "dotenv": "^16.4.7",
         "fastify": "^5.2.1",
+        "jsdom": "^26.0.0",
         "nanoid": "^5.0.9",
         "openai": "^6.22.0",
         "pino": "^9.6.0",
         "pino-pretty": "^13.0.0",
+        "qrcode-terminal": "^0.12.0",
+        "whatsapp-web.js": "^1.34.6",
         "ws": "^8.18.0",
         "zod": "^3.24.1"
     },
     "devDependencies": {
+        "@types/jsdom": "^27.0.0",
         "@types/node": "^22.10.5",
+        "@types/qrcode-terminal": "^0.12.2",
         "@types/ws": "^8.5.13",
         "tsx": "^4.19.2",
         "typescript": "^5.7.3",

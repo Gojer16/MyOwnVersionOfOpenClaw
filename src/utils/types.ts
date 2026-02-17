@@ -44,11 +44,24 @@ export interface MediaAttachment {
     size?: number;
 }
 
+export interface TokenUsage {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+}
+
 export interface OutboundMessage {
     sessionId: string;
     text: string;
     media?: MediaAttachment | null;
     replyTo?: string;
+    metadata?: {
+        usage?: TokenUsage;
+        provider?: string;
+        model?: string;
+        error?: boolean;
+        errorDetails?: string;
+    };
 }
 
 export interface Message {
@@ -116,17 +129,65 @@ export interface Channel {
 // ─── Event Bus Types ──────────────────────────────────────────────
 
 export interface EventMap {
+    // Core message events
     'message.inbound': { message: InboundMessage; sessionId: string };
     'message.outbound': { message: OutboundMessage; sessionId: string };
+    
+    // Tool events
     'tool.execute': { sessionId: string; tool: string; args: Record<string, unknown> };
     'tool.complete': { sessionId: string; tool: string; result: ToolResult };
+    'tool.started': { sessionId: string; toolId: string; toolName: string; args: Record<string, unknown> };
+    'tool.failed': { sessionId: string; toolId: string; toolName: string; error: string };
+    
+    // Session events
     'session.created': { session: Session };
     'session.idle': { sessionId: string };
     'session.resumed': { session: Session };
+    'session.closed': { sessionId: string; reason: string };
+    
+    // Shadow loop events
     'shadow.event': { type: string; data: unknown };
     'shadow.ghost': { sessionId: string; message: string };
+    
+    // Configuration events
     'config.changed': { key: string; value: unknown };
+    'config.reload': { path: string };
+    'config.reloaded': { config: unknown };
+    
+    // Agent events
     'agent.thinking': { sessionId: string };
+    'agent.model.used': { sessionId: string; provider: string; model: string; iteration?: number };
+    'agent.run.started': { sessionId: string; runId: string };
+    'agent.run.completed': { sessionId: string; runId: string; duration: number };
+    'agent.run.failed': { sessionId: string; runId: string; error: string };
+    
+    // Protocol events
+    'protocol.connected': { clientId: string; protocolVersion: string };
+    'protocol.disconnected': { clientId: string; reason?: string };
+    'protocol.error': { clientId: string; error: string; code?: string };
+    
+    // Plugin events
+    'plugin.loaded': { pluginId: string; pluginName: string };
+    'plugin.activated': { pluginId: string; pluginName: string };
+    'plugin.deactivated': { pluginId: string; pluginName: string };
+    'plugin.error': { pluginId: string; error: string };
+    
+    // Cron events
+    'cron.job.added': { jobId: string; jobName: string; schedule: string };
+    'cron.job.removed': { jobId: string; jobName: string };
+    'cron.job.started': { jobId: string; runId: string };
+    'cron.job.completed': { jobId: string; runId: string; duration: number };
+    'cron.job.failed': { jobId: string; runId: string; error: string };
+    
+    // Channel events
+    'channel.connected': { channelId: string; channelName: string };
+    'channel.disconnected': { channelId: string; channelName: string; reason?: string };
+    'channel.error': { channelId: string; error: string };
+    
+    // System events
+    'system.startup': { version: string; timestamp: number };
+    'system.shutdown': { signal: string; timestamp: number };
+    'system.error': { component: string; error: string; stack?: string };
 }
 
 // ─── WebSocket Client Tracking ────────────────────────────────────

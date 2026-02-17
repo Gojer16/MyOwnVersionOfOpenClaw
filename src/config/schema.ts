@@ -75,11 +75,20 @@ const CliChannelSchema = z.object({
     enabled: z.boolean().default(true),
 });
 
+const WhatsAppChannelSchema = z.object({
+    enabled: z.boolean().default(false),
+    allowedUsers: z.array(z.string()).default([]),
+    allowedGroups: z.array(z.string()).default([]),
+    groupActivation: z.enum(['mention', 'always']).default('mention'),
+    sessionName: z.string().default('Talon'),
+});
+
 const ChannelsSchema = z.object({
     telegram: TelegramChannelSchema.default({}),
     discord: DiscordChannelSchema.default({}),
     webchat: WebchatChannelSchema.default({}),
     cli: CliChannelSchema.default({}),
+    whatsapp: WhatsAppChannelSchema.default({}),
 });
 
 // ─── Tools ────────────────────────────────────────────────────────
@@ -117,11 +126,33 @@ const OsToolsSchema = z.object({
     clipboard: z.boolean().default(true),
 });
 
+const WebSearchSchema = z.object({
+    enabled: z.boolean().default(true),
+    provider: z.enum(['deepseek', 'openrouter', 'tavily', 'duckduckgo']).default('deepseek'),
+    model: z.string().default('deepseek-chat'),
+    apiKey: z.string().optional(),
+    maxResults: z.number().int().min(1).max(10).default(5),
+    timeoutSeconds: z.number().int().default(30),
+});
+
+const WebFetchSchema = z.object({
+    enabled: z.boolean().default(true),
+    maxChars: z.number().int().default(50_000),
+    timeoutSeconds: z.number().int().default(30),
+    maxRedirects: z.number().int().min(0).max(5).default(3),
+});
+
+const WebToolsSchema = z.object({
+    search: WebSearchSchema.default({}),
+    fetch: WebFetchSchema.default({}),
+});
+
 const ToolsSchema = z.object({
     files: FileToolsSchema.default({}),
     shell: ShellToolsSchema.default({}),
     browser: BrowserToolsSchema.default({}),
     os: OsToolsSchema.default({}),
+    web: WebToolsSchema.default({}),
 });
 
 // ─── Memory ───────────────────────────────────────────────────────
