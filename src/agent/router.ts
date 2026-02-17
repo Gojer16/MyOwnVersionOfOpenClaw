@@ -228,4 +228,19 @@ export class ModelRouter {
     hasProviders(): boolean {
         return this.providers.size > 0;
     }
+
+    /**
+     * Get all providers for fallback routing.
+     */
+    getAllProviders(): Array<{ id: string; provider: OpenAICompatibleProvider; model: string }> {
+        const result: Array<{ id: string; provider: OpenAICompatibleProvider; model: string }> = [];
+
+        for (const [id, provider] of this.providers.entries()) {
+            const models = this.config.agent.providers[id]?.models ?? [];
+            const model = models[0] ?? 'unknown';
+            result.push({ id, provider, model });
+        }
+
+        return result;
+    }
 }

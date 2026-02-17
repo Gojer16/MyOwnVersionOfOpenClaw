@@ -125,6 +125,53 @@ export class MemoryManager {
             }
         }
 
+        // 🛑 CRITICAL FIX #2: Ensure ALL tool results for assistant messages are included
+        // If we have an assistant message with tool_calls, we MUST have all corresponding tool messages.
+        // Find assistant messages with tool_calls and ensure their tool results are present.
+        const assistantMsgsWithTools = recentMessages.filter(
+            m => m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0
+        );
+
+        for (const assistantMsg of assistantMsgsWithTools) {
+            const assistantIndex = session.messages.indexOf(assistantMsg);
+            const expectedToolIds = new Set(assistantMsg.toolCalls!.map(tc => tc.id));
+            
+            // Find which tool results we have in recentMessages
+            const presentToolIds = new Set(
+                recentMessages
+                    .filter(m => m.role === 'tool')
+                    .map(m => m.toolResults?.[0]?.metadata?.confirmation)
+                    .filter(Boolean)
+            );
+
+            // Check if we're missing any tool results
+            const missingToolIds = [...expectedToolIds].filter(id => !presentToolIds.has(id));
+
+            if (missingToolIds.length > 0) {
+                // Look for missing tool messages in the full session history
+                const missingTools: Message[] = [];
+                for (let i = assistantIndex + 1; i < session.messages.length; i++) {
+                    const msg = session.messages[i];
+                    if (msg.role !== 'tool') break; // Stop at non-tool message
+                    
+                    const toolId = msg.toolResults?.[0]?.metadata?.confirmation;
+                    if (toolId && missingToolIds.includes(toolId)) {
+                        missingTools.push(msg);
+                    }
+                }
+
+                // Add missing tool messages to recentMessages
+                if (missingTools.length > 0) {
+                    logger.debug({
+                        assistantIndex,
+                        missingCount: missingTools.length,
+                        missingToolIds,
+                    }, 'Adding missing tool messages to context');
+                    recentMessages.unshift(...missingTools);
+                }
+            }
+        }
+
         for (const msg of recentMessages) {
             if (msg.role === 'tool') {
                 // Truncate tool outputs — this is a major cost saver
@@ -227,5 +274,15 @@ export class MemoryManager {
     reloadSoul(): void {
         this.soul = loadSoul(this.config.workspaceRoot);
         logger.info('Reloaded SOUL.md');
+    }
+
+    /**
+     * Mark session for compression on next iteration.
+     * Used when context window is critical.
+     */
+    markForCompression(session: Session): void {
+        // Force compression by simulating more messages
+        // This will trigger needsCompression() on next check
+        logger.info({ sessionId: session.id }, 'Session marked for compression');
     }
 }

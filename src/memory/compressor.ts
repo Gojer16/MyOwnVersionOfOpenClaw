@@ -48,7 +48,7 @@ export class MemoryCompressor {
 
             const summary = response.content?.trim() ?? oldSummary;
 
-            logger.info({
+            logger.debug({
                 provider: route.providerId,
                 model: route.model,
                 inputMessages: messages.length,
