@@ -1,21 +1,127 @@
-# Kimi Personal AI - Minimal Architecture
+# Kimi - Missing Features Roadmap
 
-## Core Philosophy
+> **What's Left**: Subagent delegation, productivity tools, and smart routing.
 
-**Single user. Single session. CLI interface. Smart memory. Model routing.**
+## ✅ Already Complete
+- Core agent loop with tool calling
+- Memory compression (≤800 token summaries)
+- Model routing (DeepSeek → OpenRouter → OpenAI)
+- Context management (last 5-10 messages only)
+- Web search, file tools, shell tools, memory tools
+- Multi-channel support (CLI, TUI, Telegram, WhatsApp)
 
-Built to be **better than OpenClaw** through superior memory management and intelligent model selection:
+---
 
-1. **Smart Memory** - Never send full history, use compressed summaries (800 tokens max)
-2. **Model Routing** - Right model for the right job (cheap for subtasks, capable for main)
-3. **Subagent Delegation** - Break complex tasks into focused subagents
-4. **Minimal Context** - Only send what matters (system + summary + last 5-10 messages)
+## 🚧 MISSING IMPLEMENTATIONS
 
-**This beats OpenClaw by:**
-- **90% lower token costs** through aggressive context compression
-- **Faster responses** via model routing (GPT-5 Nano for subagents)
-- **Better memory** through structured summaries, not raw logs
-- **Smarter workflows** via subagent delegation
+### 1. Subagent Execution System ❌
+
+**Status:** Prompts exist, but NO execution framework
+
+**What Needs to Be Built:**
+```
+src/subagents/
+├── base.ts           # Base subagent class
+├── research.ts       # Web research (GPT-5 Nano)
+├── writer.ts         # Content creation
+├── planner.ts        # Task planning
+└── summarizer.ts     # Text compression
+```
+
+**Current State:**
+- ✅ `buildSubAgentPrompt()` in `src/agent/prompts.ts`
+- ❌ No spawning/routing logic
+- ❌ No JSON result parsing
+- ❌ No task delegation
+
+---
+
+### 2. Productivity Tools ❌
+
+**Status:** Not implemented
+
+**What Needs to Be Built:**
+```
+src/tools/notes.ts    # Save/search notes
+src/tools/tasks.ts    # Todo list management
+```
+
+**Tools Needed:**
+- `notes_save` - Save note to knowledge base
+- `notes_search` - Search through notes
+- `tasks_add` - Add task to todo list
+- `tasks_list` - List tasks
+- `tasks_complete` - Mark task done
+
+---
+
+### 3. Smart Routing & Budget Mode ❌
+
+**Status:** Router exists, but no auto-detection
+
+**What Needs to Be Built:**
+```
+src/agent/routing-heuristics.ts   # Auto-detect task type
+src/utils/budget.ts               # Cost tracking
+```
+
+**Features Needed:**
+- Auto-route by task type (research → GPT-5 Nano, code → Claude)
+- Budget mode toggle (cheap vs powerful models)
+- Cost estimation per conversation
+- `/budget` command to show spending
+
+---
+
+### 4. Advanced Memory Features ❌
+
+**Status:** Basic compression works, but missing structured format
+
+**What Needs to Be Built:**
+- Structured memory summary (JSON format from doc)
+- Auto-fact extraction
+- User profile tracking
+- Decision logging
+
+**Current State:**
+- ✅ Basic text summarization
+- ❌ No structured JSON format
+- ❌ No automatic fact extraction
+
+---
+
+## 📋 Implementation Priority
+
+### Phase 1: Subagents (High Priority)
+1. Build `src/subagents/base.ts`
+2. Implement research subagent
+3. Add task delegation to agent loop
+
+### Phase 2: Productivity Tools (Medium Priority)
+1. Notes tool (`notes_save`, `notes_search`)
+2. Tasks tool (`tasks_add`, `tasks_list`, `tasks_complete`)
+
+### Phase 3: Smart Routing (Low Priority)
+1. Auto-routing heuristics
+2. Budget tracking
+3. Cost estimation UI
+
+---
+
+## 📊 Current Progress: ~60% Complete
+
+**What Works:**
+- Agent loop with tool calling ✅
+- Memory compression ✅
+- Model routing ✅
+- Web search ✅
+- File/shell/memory tools ✅
+
+**What's Missing:**
+- Subagent delegation ❌
+- Productivity tools ❌
+- Auto-routing ❌
+- Budget mode ❌
 
 ---
 
