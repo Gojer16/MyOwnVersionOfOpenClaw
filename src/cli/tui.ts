@@ -55,6 +55,9 @@ export async function startTUI(): Promise<void> {
         try {
             const msg = JSON.parse(data.toString());
 
+            // Debug: log all messages
+            console.log(chalk.dim(`\n[DEBUG] Received: ${msg.type}`));
+
             if (msg.type === 'agent.response') {
                 // Clear the prompt line
                 readline.clearLine(process.stdout, 0);
@@ -62,18 +65,18 @@ export async function startTUI(): Promise<void> {
 
                 if (msg.payload?.type === 'text') {
                     process.stdout.write(chalk.green('🦅 Talon > ') + msg.payload.text);
-                } else if (msg.payload?.type === 'done') {
-                    console.log('\n');
-                    isWaitingForResponse = false;
-                    rl.prompt();
                 }
+            } else if (msg.type === 'agent.response.end') {
+                console.log('\n');
+                isWaitingForResponse = false;
+                rl.prompt();
             } else if (msg.type === 'tool.call') {
                 readline.clearLine(process.stdout, 0);
                 readline.cursorTo(process.stdout, 0);
-                console.log(chalk.dim(`  🛠️  Using ${msg.payload?.tool}...`));
+                console.log(chalk.dim(`  🛠️  Using ${msg.payload?.tool || msg.payload?.name}...`));
             }
         } catch (err) {
-            // Ignore parse errors
+            console.log(chalk.red('\n[ERROR] Parse error:'), err);
         }
     });
 
@@ -106,8 +109,16 @@ export async function startTUI(): Promise<void> {
             const command = input.slice(1);
             console.log(chalk.dim(`$ ${command}`));
             ws.send(JSON.stringify({
-                type: 'message',
-                content: `Execute this shell command: ${command}`,
+                type: 'channel.message',
+                payload: {
+                    channel: 'tui',
+                    senderId: 'tui-user',
+                    senderName: 'TUI User',
+                    text: `Execute this shell command: ${command}`,
+                    media: null,
+                    isGroup: false,
+                    groupId: null,
+                },
             }));
             isWaitingForResponse = true;
             return;
@@ -115,8 +126,16 @@ export async function startTUI(): Promise<void> {
 
         // Send regular message
         ws.send(JSON.stringify({
-            type: 'message',
-            content: input,
+            type: 'channel.message',
+            payload: {
+                channel: 'tui',
+                senderId: 'tui-user',
+                senderName: 'TUI User',
+                text: input,
+                media: null,
+                isGroup: false,
+                groupId: null,
+            },
         }));
         isWaitingForResponse = true;
     });
@@ -157,8 +176,16 @@ function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket
 
         case 'status':
             ws.send(JSON.stringify({
-                type: 'message',
-                content: 'Show my current session status',
+                type: 'channel.message',
+                payload: {
+                    channel: 'tui',
+                    senderId: 'tui-user',
+                    senderName: 'TUI User',
+                    text: 'Show my current session status',
+                    media: null,
+                    isGroup: false,
+                    groupId: null,
+                },
             }));
             break;
 
