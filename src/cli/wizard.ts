@@ -571,7 +571,7 @@ async function stepHooks(): Promise<{ bootMd: boolean }> {
 // ─── Step 7: Health Check ─────────────────────────────────────────
 
 async function stepHealthCheck(config: WizardResult): Promise<void> {
-    console.log(chalk.bold.cyan('\n  Step 7/7: Health Check\n'));
+    console.log(chalk.bold.cyan('\n  Step 7/8: Health Check\n'));
 
     // Verify config was written
     if (fs.existsSync(CONFIG_PATH)) {
@@ -603,6 +603,30 @@ async function stepHealthCheck(config: WizardResult): Promise<void> {
 
 // ─── Save Config ──────────────────────────────────────────────────
 
+
+// ─── Step 8: Service Installation ─────────────────────────────────
+
+async function stepServiceInstall(): Promise<void> {
+    console.log(chalk.bold.cyan('\n  Step 8/8: Service Installation\n'));
+
+    const installAsService = await confirm({
+        message: 'Install Talon as system service? (recommended)',
+        default: true,
+    });
+
+    if (!installAsService) {
+        console.log(chalk.dim('  Skipped - install later with `talon service install`\n'));
+        return;
+    }
+
+    try {
+        const { installService } = await import('./service.js');
+        await installService();
+    } catch (err) {
+        console.log(chalk.yellow('  ⚠ Service installation failed'));
+        console.log(chalk.dim(`    Try again with: talon service install\n`));
+    }
+}
 function saveConfig(result: WizardResult): void {
     ensureRuntimeDirs();
 
@@ -779,13 +803,16 @@ export async function runWizard(): Promise<void> {
     // Health check
     await stepHealthCheck(result);
 
+    // Service installation
+    await stepServiceInstall();
+
     // Done!
     console.log(chalk.bold.cyan('  ─────────────────────────────────'));
     console.log(chalk.bold.green('  🦅 Talon is configured!'));
     console.log('');
     console.log(chalk.dim('  Next steps:'));
-    console.log(`    ${chalk.cyan('talon start')}   Start the gateway`);
-    console.log(`    ${chalk.cyan('talon health')}  Check system health`);
-    console.log(`    ${chalk.cyan('talon setup')}   Re-run this wizard`);
+    console.log(`    ${chalk.cyan('talon start')}          Start the gateway`);
+    console.log(`    ${chalk.cyan('talon service status')} Check service status`);
+    console.log(`    ${chalk.cyan('talon health')}         Check system health`);
     console.log('');
 }

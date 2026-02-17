@@ -160,6 +160,30 @@ Examples:
             break;
         }
 
+        case 'service': {
+            const { installService, uninstallService, restartService, serviceStatus } = await import('./service.js');
+            const subcommand = flags[0];
+            
+            switch (subcommand) {
+                case 'install':
+                    await installService();
+                    break;
+                case 'uninstall':
+                    await uninstallService();
+                    break;
+                case 'restart':
+                    await restartService();
+                    break;
+                case 'status':
+                    await serviceStatus();
+                    break;
+                default:
+                    console.error('Usage: talon service <install|uninstall|restart|status>');
+                    process.exit(1);
+            }
+            break;
+        }
+
         default: {
             console.error(`Unknown command: ${command}`);
             console.error('Run `talon --help` for available commands.');
