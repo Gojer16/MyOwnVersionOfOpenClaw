@@ -136,6 +136,39 @@ export async function addProvider(): Promise<void> {
     
     console.log(chalk.green(`\n✓ Provider ${provider.name} configured`));
     
+    // Ask to select models for fallback
+    const { selectModels } = await inquirer.prompt({
+        type: 'confirm',
+        name: 'selectModels',
+        message: 'Select multiple models for fallback?',
+        default: false,
+    });
+    
+    let selectedModels: string[] = [];
+    
+    if (selectModels) {
+        const { modelIds } = await inquirer.prompt({
+            type: 'checkbox',
+            name: 'modelIds',
+            message: 'Select models (use space to select, enter to confirm):',
+            choices: models.map(m => ({ name: m.name, value: m.id })),
+            pageSize: 15,
+            validate: (answer) => {
+                if (answer.length < 1) {
+                    return 'You must choose at least one model.';
+                }
+                return true;
+            },
+        });
+        selectedModels = modelIds;
+        
+        // Update config with selected models
+        config.agent.providers[providerId].models = selectedModels;
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+        
+        console.log(chalk.green(`\n✓ Selected ${selectedModels.length} models for fallback`));
+    }
+    
     // Ask to switch
     const { switchNow } = await inquirer.prompt({
         type: 'confirm',
@@ -145,12 +178,18 @@ export async function addProvider(): Promise<void> {
     });
     
     if (switchNow) {
-        // Let user choose model
+        // Let user choose primary model
+        const availableModels = selectedModels.length > 0 ? selectedModels : models.map(m => m.id);
+        const modelChoices = availableModels.map(id => {
+            const model = models.find(m => m.id === id);
+            return { name: model?.name || id, value: id };
+        });
+        
         const { modelId } = await inquirer.prompt({
             type: 'list',
             name: 'modelId',
-            message: 'Choose model:',
-            choices: models.map(m => ({ name: m.name, value: m.id })),
+            message: 'Choose primary model:',
+            choices: modelChoices,
             pageSize: 15,
         });
         
