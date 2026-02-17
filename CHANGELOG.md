@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ New Features
+
+#### TUI Client (`talon tui`)
+- **Interactive WebSocket Client**: Connect to running gateway without stopping/starting
+- **Real-time Chat**: Stream responses with typing indicators (⏳ Talon is thinking...)
+- **Status Indicators**: Shows model, workspace, and connection status on startup
+- **Better Tool Display**: Shows file names and query details (🛠️ file_read → IDENTITY.md)
+- **Response Formatting**: Beautiful box borders for agent responses
+- **Slash Commands**: `/help`, `/clear`, `/exit`, `/status`, `/model`, `/config`, `/version`
+- **Bash Execution**: Use `!` prefix for shell commands (e.g., `!ls -la`)
+- **Gateway Check**: Verifies gateway is running before connecting
+- **1.5s Startup Delay**: Waits for gateway to be fully ready
+
+#### Provider Management
+- **`talon provider`**: Add/change AI providers with interactive prompts
+  - Reuses existing API keys from `.env`
+  - Fetches all 342+ OpenRouter models dynamically
+  - Multi-model selection for fallback (checkbox interface)
+  - Auto-restart gateway option
+  
+- **`talon switch`**: Switch between configured models
+  - Shows all models from selected provider
+  - Updates config and optionally restarts gateway
+
+#### Service Management
+- **`talon service start`**: Start service without reinstalling
+- **`talon service stop`**: Stop service temporarily
+- **`talon service restart`**: Restart running service
+- **`talon service status`**: Check installation and running state
+- **`talon service install`**: Install as system service (LaunchAgent/systemd)
+- **`talon service uninstall`**: Clean removal
+
 ### 🎨 Setup Wizard Enhancements
 - **Talon Branding**: Changed emoji from 🦞 to 🦅 (Talon eagle)
 - **Timezone-Aware Greetings**: Shows "Good morning/afternoon/evening" based on local time
@@ -14,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cleaner UI**: Removed verbose descriptions from provider/model selections
 - **OpenClaw-Style Channel Selection**: Loop-based selection with visual indicators (○/●)
 - **Removed Discord**: Replaced with WhatsApp support
+- **Model Format Fix**: DeepSeek models no longer double-prefixed
 
 ### 🔧 Gateway Configuration
 - **Token Authentication**: Auto-generate 48-char hex tokens
@@ -29,24 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Template Included**: Example BOOT.md with usage tips
 - **Setup Integration**: Optional hook configuration in wizard (Step 6/8)
 
-### 📦 Service Management (Full Implementation)
-- **CLI Commands**:
-  - `talon service install` - Install as LaunchAgent (macOS) or systemd (Linux)
-  - `talon service uninstall` - Clean removal
-  - `talon service restart` - Restart running service
-  - `talon service status` - Check installed/running state
-  
-- **Runtime Selection**: Choose Node or Bun during installation
-- **Modern launchctl**: Uses `bootstrap`, `bootout`, `kickstart` commands
-- **Auto-start**: Service starts on login
-- **Auto-restart**: KeepAlive ensures service restarts on failure
-- **Setup Integration**: Service installation as final wizard step (Step 8/8)
-
 ### 🐛 Bug Fixes
 - Fixed TypeScript validation error in wizard port input
 - Fixed LaunchAgent plist to use separate command and args array
 - Added timeouts to service restart to prevent hanging
 - Fixed getuid() TypeScript errors for cross-platform compatibility
+- Fixed tool name display in TUI (was showing "undefined")
+- Fixed model format to prevent OpenRouter double-prefixing
+- Fixed inquirer/readline conflicts in provider commands
+- Fixed workspace identity loading (fresh BOOTSTRAP.md on first run)
 
 ### 📝 Documentation
 - Updated README with service management commands

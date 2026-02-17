@@ -83,20 +83,40 @@ Talk to Talon wherever you are:
 # Service Management
 talon service install    # Install as system service (LaunchAgent/systemd)
 talon service uninstall  # Remove service
+talon service start      # Start service
+talon service stop       # Stop service temporarily
 talon service restart    # Restart running service
 talon service status     # Check if installed/running
 
-# Interactive chat with slash commands
-You > /help
-🦅 Talon CLI Commands
+# Provider Management
+talon provider           # Add/change AI provider (saves API key to .env)
+talon switch             # Switch between configured models
 
-System:
-  /config      View Talon configuration
-  /version     Show version info
-  /debug       Toggle debug logging
+# Interactive TUI
+talon tui                # Connect to running gateway with beautiful interface
+
+# TUI Features:
+  ✓ Connected to gateway
+  ⚡ Model: openrouter/gpt-4o
+  📍 Workspace: ~/.talon/workspace
+  
+  You > Hello!
+    ⏳ Talon is thinking...
+    🛠️  file_read → IDENTITY.md
+  ╭─ Talon ─────────────────────
+  │ Hey! 👋 How can I help?
+  ╰─────────────────────────────
+  
+  # Slash commands
+  /help        Show available commands
   /model       Show current model
-  /exit        Exit Talon
-  /quit        Alias for /exit
+  /config      View configuration
+  /version     Show version info
+  /clear       Clear screen
+  /exit        Exit TUI
+  
+  # Bash execution
+  !ls -la      Execute shell commands
 
 Session:
   /help        Show available commands
