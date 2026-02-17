@@ -1,0 +1,73 @@
+{
+  "_comment": "Talon Configuration - Copy this to ~/.talon/config.json and customize",
+  "_security": "NEVER commit files with real API keys or phone numbers!",
+  "_setup": "1. Copy this file to ~/.talon/config.json",
+  "_setup2": "2. Create ~/.talon/.env with your secrets (see .env.example)",
+  "_setup3": "3. Use ${ENV_VAR_NAME} syntax for sensitive values",
+
+  "gateway": {
+    "host": "127.0.0.1",
+    "port": 19789,
+    "auth": {
+      "mode": "none",
+      "token": "${TALON_TOKEN}"
+    }
+  },
+
+  "agent": {
+    "model": "deepseek/deepseek-chat",
+    "providers": {
+      "deepseek": {
+        "apiKey": "${DEEPSEEK_API_KEY}",
+        "models": ["deepseek-chat", "deepseek-reasoner"]
+      },
+      "openrouter": {
+        "apiKey": "${OPENROUTER_API_KEY}",
+        "models": ["anthropic/claude-3.5-sonnet", "openai/gpt-4o-mini"]
+      }
+    },
+    "maxIterations": 10,
+    "thinkingLevel": "medium"
+  },
+
+  "channels": {
+    "cli": {
+      "enabled": true
+    },
+    "telegram": {
+      "enabled": false,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "allowedUsers": [],
+      "groupActivation": "mention"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "allowedUsers": ["${WHATSAPP_PHONE_NUMBER}"],
+      "allowedGroups": [],
+      "groupActivation": "mention"
+    }
+  },
+
+  "tools": {
+    "files": {
+      "enabled": true,
+      "allowedPaths": ["~/"]
+    },
+    "shell": {
+      "enabled": true,
+      "confirmDestructive": true
+    },
+    "browser": {
+      "enabled": true,
+      "headless": true
+    }
+  },
+
+  "memory": {
+    "enabled": true,
+    "compaction": {
+      "enabled": true,
+      "keepRecentMessages": 10
+    }
+  }
+}

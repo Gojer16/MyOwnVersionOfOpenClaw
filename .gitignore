@@ -4,11 +4,28 @@ node_modules/
 # Build output
 dist/
 
-# Environment
+# Environment variables - NEVER commit secrets!
 .env
+.env.local
+.env.*.local
 
-# Runtime data
+# Talon user data - contains secrets, sessions, and personal data
+# These should never be committed
 ~/.talon/
+.talon/
+config.json
+!config.example.json
+
+# User workspace - contains AI personality, memories, and personal data
+/workspace/
+!templates/workspace/
+sessions/
+whatsapp-auth/
+*.session
+
+# Memory files
+memory/
+*.memory.md
 
 # OS files
 .DS_Store
@@ -22,6 +39,12 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
 
 # Test coverage
 coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
