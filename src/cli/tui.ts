@@ -350,6 +350,7 @@ function showVersion(): void {
 async function changeProvider(): Promise<void> {
     const { select, password, confirm } = await import('@inquirer/prompts');
     const { PROVIDERS } = await import('./providers.js');
+    const { execSync } = await import('node:child_process');
     
     try {
         const configPath = path.join(os.homedir(), '.talon', 'config.json');
@@ -403,7 +404,30 @@ async function changeProvider(): Promise<void> {
         if (switchNow) {
             console.log(chalk.green(`✓ Switched to ${config.agent.model}`));
         }
-        console.log(chalk.yellow('  Restart gateway: talon service restart\n'));
+        
+        // Auto-restart gateway
+        const shouldRestart = await confirm({
+            message: 'Restart gateway now?',
+            default: true,
+        });
+        
+        if (shouldRestart) {
+            console.log(chalk.dim('\n  Restarting gateway...'));
+            try {
+                const cliPath = path.join(process.cwd(), 'dist', 'cli', 'index.js');
+                execSync(`${process.execPath} ${cliPath} service restart`, { 
+                    stdio: 'pipe',
+                    timeout: 10000,
+                });
+                console.log(chalk.green('  ✓ Gateway restarted\n'));
+                console.log(chalk.yellow('  Reconnect with: /exit then talon tui\n'));
+            } catch (err) {
+                console.log(chalk.red('  ✗ Failed to restart gateway'));
+                console.log(chalk.yellow('  Run manually: talon service restart\n'));
+            }
+        } else {
+            console.log(chalk.yellow('  Remember to restart: talon service restart\n'));
+        }
     } catch (err: any) {
         if (err.name !== 'ExitPromptError') {
             console.log(chalk.red('\n✗ Failed to change provider\n'));
@@ -412,7 +436,8 @@ async function changeProvider(): Promise<void> {
 }
 
 async function switchModel(): Promise<void> {
-    const { select } = await import('@inquirer/prompts');
+    const { select, confirm } = await import('@inquirer/prompts');
+    const { execSync } = await import('node:child_process');
     
     try {
         const configPath = path.join(os.homedir(), '.talon', 'config.json');
@@ -440,7 +465,30 @@ async function switchModel(): Promise<void> {
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
         
         console.log(chalk.green(`\n✓ Switched to ${config.agent.model}`));
-        console.log(chalk.yellow('  Restart gateway: talon service restart\n'));
+        
+        // Auto-restart gateway
+        const shouldRestart = await confirm({
+            message: 'Restart gateway now?',
+            default: true,
+        });
+        
+        if (shouldRestart) {
+            console.log(chalk.dim('\n  Restarting gateway...'));
+            try {
+                const cliPath = path.join(process.cwd(), 'dist', 'cli', 'index.js');
+                execSync(`${process.execPath} ${cliPath} service restart`, { 
+                    stdio: 'pipe',
+                    timeout: 10000,
+                });
+                console.log(chalk.green('  ✓ Gateway restarted\n'));
+                console.log(chalk.yellow('  Reconnect with: /exit then talon tui\n'));
+            } catch (err) {
+                console.log(chalk.red('  ✗ Failed to restart gateway'));
+                console.log(chalk.yellow('  Run manually: talon service restart\n'));
+            }
+        } else {
+            console.log(chalk.yellow('  Remember to restart: talon service restart\n'));
+        }
     } catch (err: any) {
         if (err.name !== 'ExitPromptError') {
             console.log(chalk.red('\n✗ Failed to switch model\n'));
