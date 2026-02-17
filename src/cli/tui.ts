@@ -198,6 +198,14 @@ function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket
             rl.prompt();
             break;
 
+        case 'provider':
+            changeProvider().then(() => rl.prompt());
+            break;
+
+        case 'switch':
+            switchModel().then(() => rl.prompt());
+            break;
+
         case 'status':
         case 'reset':
         case 'new':
@@ -254,6 +262,8 @@ function showHelp(): void {
     
     console.log(chalk.bold('System'));
     console.log('  /model      Show current model');
+    console.log('  /provider   Change AI provider');
+    console.log('  /switch     Switch model');
     console.log('  /exit       Exit Talon');
     console.log('  /quit       Alias for /exit');
     console.log('  /config     View current Talon configuration');
@@ -334,5 +344,90 @@ function showVersion(): void {
     } catch (err) {
         console.log(chalk.red('\n✗ Failed to load version info'));
         console.log('');
+    }
+}
+
+async function changeProvider(): Promise<void> {
+    const { select, password } = await import('@inquirer/prompts');
+    const { PROVIDERS } = await import('./providers.js');
+    
+    try {
+        const configPath = path.join(os.homedir(), '.talon', 'config.json');
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        
+        console.log('');
+        const providerId = await select({
+            message: 'Choose provider:',
+            choices: PROVIDERS.filter(p => p.id !== 'anthropic' && p.id !== 'custom').map(p => ({
+                name: p.name,
+                value: p.id,
+            })),
+        });
+        
+        const provider = PROVIDERS.find(p => p.id === providerId)!;
+        const apiKey = await password({ message: `Enter ${provider.name} API key:` });
+        
+        // Update config
+        config.agent.providers[providerId] = {
+            apiKey,
+            baseUrl: provider.baseUrl,
+            models: provider.models.map(m => m.id),
+        };
+        
+        // Update env
+        const envPath = path.join(os.homedir(), '.talon', '.env');
+        let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+        const envVar = provider.envVar;
+        const regex = new RegExp(`^${envVar}=.*$`, 'm');
+        
+        if (regex.test(envContent)) {
+            envContent = envContent.replace(regex, `${envVar}=${apiKey}`);
+        } else {
+            envContent += `\n${envVar}=${apiKey}\n`;
+        }
+        
+        fs.writeFileSync(envPath, envContent, 'utf-8');
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+        
+        console.log(chalk.green(`\n✓ Provider ${provider.name} configured`));
+        console.log(chalk.yellow('  Restart gateway for changes to take effect: talon service restart\n'));
+    } catch (err) {
+        console.log(chalk.red('\n✗ Failed to change provider\n'));
+    }
+}
+
+async function switchModel(): Promise<void> {
+    const { select } = await import('@inquirer/prompts');
+    
+    try {
+        const configPath = path.join(os.homedir(), '.talon', 'config.json');
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        
+        const providers = Object.keys(config.agent.providers);
+        if (providers.length === 0) {
+            console.log(chalk.yellow('\n⚠ No providers configured. Use /provider first\n'));
+            return;
+        }
+        
+        console.log('');
+        const providerId = await select({
+            message: 'Choose provider:',
+            choices: providers.map(p => ({ name: p, value: p })),
+        });
+        
+        const models = config.agent.providers[providerId].models || [];
+        const modelId = await select({
+            message: 'Choose model:',
+            choices: models.map((m: string) => ({ name: m, value: m })),
+        });
+        
+        // Update model
+        config.agent.model = providerId === 'deepseek' ? modelId : `${providerId}/${modelId}`;
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+        
+        console.log(chalk.green(`\n✓ Switched to ${config.agent.model}`));
+        console.log(chalk.yellow('  Restart gateway for changes to take effect: talon service restart\n'));
+    } catch (err) {
+        console.log(chalk.red('\n✗ Failed to switch model\n'));
     }
 }
