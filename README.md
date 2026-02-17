@@ -4,8 +4,8 @@
 
 Inspired by [OpenClaw](https://openclaw.ai/) — rebuilt from scratch as a privacy-first, single-user AI assistant with proactive intelligence.
 
-**Version:** 0.3.0  
-**Status:** Enterprise architecture with protocol layer, plugins, cron scheduling & enhanced CLI
+**Version:** 0.3.1  
+**Status:** Enterprise architecture with Shadow Loop, subagents, browser control & full system access
 
 ---
 
@@ -57,6 +57,13 @@ Talk to Talon wherever you are:
 - **Session Management** - Create, resume, persist sessions
 - **Event Bus** - Pub/sub for internal communication
 
+#### Shadow Loop (Proactive Intelligence)
+- **Filesystem Watching** - Monitors file changes with chokidar
+- **Smart Heuristics** - Filters interesting events (new files, changes, test updates)
+- **Ghost Messages** - Proactive suggestions before you ask
+- **Configurable** - Custom paths, ignore patterns, cooldown periods
+- **Non-intrusive** - Observes without interrupting your workflow
+
 ### AI Agent Capabilities
 
 - **Smart Model Routing** — Uses cheapest capable model (DeepSeek → OpenRouter → OpenAI)
@@ -77,12 +84,12 @@ Talk to Talon wherever you are:
 | 📄 **Web Fetch** | Extract content from URLs | Content cleaning |
 | 🧠 **Memory** | Read/write to memory system | User-controlled |
 | 🤖 **Subagents** | Delegate to specialized agents (research, writer, planner, critic, summarizer) | Cost-optimized |
+| 🌐 **Browser** | Navigate, click, type, screenshot, extract content | Puppeteer automation |
 | 📝 **Notes** | Save and search notes in markdown | Local storage |
 | ✅ **Tasks** | Todo list management with priorities | Local storage |
 | 🍎 **Apple Notes** | Create and search Apple Notes (macOS) | Native integration |
 | ⏰ **Apple Reminders** | Manage Apple Reminders (macOS) | Native integration |
 | 📅 **Apple Calendar** | Create and manage calendar events (macOS) | Native integration |
-| 🔧 **More** | Browser automation, OS tools | Configurable permissions |
 
 ### Productivity Tools
 
@@ -123,6 +130,24 @@ Talon can delegate specialized tasks to lightweight subagents using cheap models
 - `deepseek/deepseek-chat` - DeepSeek (cheapest, $0.14/1M)
 
 See [docs/SUBAGENT_CONFIGURATION.md](docs/SUBAGENT_CONFIGURATION.md) for details.
+
+### Browser Control
+
+Talon can control browsers with Puppeteer:
+
+| Tool | Description |
+|------|-------------|
+| **browser_navigate** | Open URLs in browser |
+| **browser_click** | Click elements by selector |
+| **browser_type** | Type text into inputs |
+| **browser_screenshot** | Capture page screenshots |
+| **browser_extract** | Extract page content |
+
+**Features:**
+- Headless/headed mode
+- Custom viewport sizes
+- Auto-launch browser
+- Full page automation
 
 ### CLI Features
 
