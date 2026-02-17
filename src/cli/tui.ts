@@ -348,14 +348,13 @@ function showVersion(): void {
 }
 
 async function changeProvider(): Promise<void> {
-    const { select, password } = await import('@inquirer/prompts');
+    const { select, password, confirm } = await import('@inquirer/prompts');
     const { PROVIDERS } = await import('./providers.js');
     
     try {
         const configPath = path.join(os.homedir(), '.talon', 'config.json');
         const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         
-        console.log('');
         const providerId = await select({
             message: 'Choose provider:',
             choices: PROVIDERS.filter(p => p.id !== 'anthropic' && p.id !== 'custom').map(p => ({
@@ -374,6 +373,17 @@ async function changeProvider(): Promise<void> {
             models: provider.models.map(m => m.id),
         };
         
+        // Ask if they want to switch to this provider
+        const switchNow = await confirm({
+            message: 'Switch to this provider now?',
+            default: true,
+        });
+        
+        if (switchNow) {
+            const defaultModel = provider.models[0].id;
+            config.agent.model = providerId === 'deepseek' ? defaultModel : `${providerId}/${defaultModel}`;
+        }
+        
         // Update env
         const envPath = path.join(os.homedir(), '.talon', '.env');
         let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
@@ -390,9 +400,14 @@ async function changeProvider(): Promise<void> {
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
         
         console.log(chalk.green(`\n✓ Provider ${provider.name} configured`));
-        console.log(chalk.yellow('  Restart gateway for changes to take effect: talon service restart\n'));
-    } catch (err) {
-        console.log(chalk.red('\n✗ Failed to change provider\n'));
+        if (switchNow) {
+            console.log(chalk.green(`✓ Switched to ${config.agent.model}`));
+        }
+        console.log(chalk.yellow('  Restart gateway: talon service restart\n'));
+    } catch (err: any) {
+        if (err.name !== 'ExitPromptError') {
+            console.log(chalk.red('\n✗ Failed to change provider\n'));
+        }
     }
 }
 
@@ -409,7 +424,6 @@ async function switchModel(): Promise<void> {
             return;
         }
         
-        console.log('');
         const providerId = await select({
             message: 'Choose provider:',
             choices: providers.map(p => ({ name: p, value: p })),
@@ -426,8 +440,10 @@ async function switchModel(): Promise<void> {
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
         
         console.log(chalk.green(`\n✓ Switched to ${config.agent.model}`));
-        console.log(chalk.yellow('  Restart gateway for changes to take effect: talon service restart\n'));
-    } catch (err) {
-        console.log(chalk.red('\n✗ Failed to switch model\n'));
+        console.log(chalk.yellow('  Restart gateway: talon service restart\n'));
+    } catch (err: any) {
+        if (err.name !== 'ExitPromptError') {
+            console.log(chalk.red('\n✗ Failed to switch model\n'));
+        }
     }
 }
