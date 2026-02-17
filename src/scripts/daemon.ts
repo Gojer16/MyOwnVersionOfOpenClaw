@@ -175,8 +175,12 @@ export function daemonStatus(): void {
 /**
  * Generate launchd plist for macOS.
  */
-export function generateLaunchdPlist(executablePath: string): string {
+export function generateLaunchdPlist(command: string, args: string[]): string {
     const config = getDaemonConfig();
+    
+    const programArgs = [command, ...args, 'start']
+        .map(arg => `        <string>${arg}</string>`)
+        .join('\n');
     
     return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -186,8 +190,7 @@ export function generateLaunchdPlist(executablePath: string): string {
     <string>ai.talon.gateway</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${executablePath}</string>
-        <string>start</string>
+${programArgs}
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -208,8 +211,9 @@ export function generateLaunchdPlist(executablePath: string): string {
 /**
  * Generate systemd service file for Linux.
  */
-export function generateSystemdService(executablePath: string): string {
+export function generateSystemdService(command: string, args: string[]): string {
     const config = getDaemonConfig();
+    const execStart = [command, ...args, 'start'].join(' ');
     
     return `[Unit]
 Description=Talon Personal AI Assistant
@@ -219,7 +223,7 @@ After=network.target
 Type=simple
 User=${os.userInfo().username}
 WorkingDirectory=${config.workingDirectory}
-ExecStart=${executablePath} start
+ExecStart=${execStart}
 Restart=always
 RestartSec=10
 

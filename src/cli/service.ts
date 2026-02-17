@@ -13,21 +13,20 @@ const SERVICE_LABEL = 'ai.talon.gateway';
 /**
  * Get the path to the talon executable
  */
-function getTalonExecutable(runtime: 'node' | 'bun' = 'node'): string {
+function getTalonExecutable(runtime: 'node' | 'bun' = 'node'): { command: string; args: string[] } {
     const cliPath = path.join(process.cwd(), 'dist', 'cli', 'index.js');
     
     if (runtime === 'bun') {
         // Check if bun is available
         try {
-            execSync('which bun', { stdio: 'ignore' });
-            return `bun ${cliPath}`;
+            const bunPath = execSync('which bun', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+            return { command: bunPath, args: [cliPath] };
         } catch {
             console.log(chalk.yellow('  ⚠ Bun not found, falling back to Node'));
-            return `${process.execPath} ${cliPath}`;
         }
     }
     
-    return `${process.execPath} ${cliPath}`;
+    return { command: process.execPath, args: [cliPath] };
 }
 
 /**
@@ -120,7 +119,8 @@ export async function installService(runtime: 'node' | 'bun' = 'node'): Promise<
 
         // Generate service file
         if (process.platform === 'darwin') {
-            const plistContent = generateLaunchdPlist(executable);
+            const { command, args } = executable;
+            const plistContent = generateLaunchdPlist(command, args);
             fs.writeFileSync(file, plistContent, 'utf-8');
             
             // Bootstrap the service (modern launchctl)
@@ -144,7 +144,8 @@ export async function installService(runtime: 'node' | 'bun' = 'node'): Promise<
             }
             
         } else if (process.platform === 'linux') {
-            const serviceContent = generateSystemdService(executable);
+            const { command, args } = executable;
+            const serviceContent = generateSystemdService(command, args);
             fs.writeFileSync(file, serviceContent, 'utf-8');
             
             // Reload systemd and enable service
