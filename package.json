@@ -16,7 +16,8 @@
         "setup:secure": "node scripts/setup-secure.js",
         "health": "tsx src/cli/index.ts health",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage"
     },
     "engines": {
         "node": ">=22.0.0"
