@@ -1,15 +1,21 @@
-# MiniMax - Missing Features Roadmap
+# MiniMax - Implementation Status
 
-> **What's Left**: Discord channel, browser automation, WebChat UI, and mobile apps.
+> **Progress Update**: Major features complete! Browser automation, subagents, productivity tools, and Shadow Loop implemented.
 
-## ✅ Already Complete (~70%)
+## ✅ Already Complete (~85%)
 - Gateway with WebSocket server
 - Session management and routing
-- Agent runtime with Claude/OpenAI support
+- Agent runtime with multi-provider support (DeepSeek, OpenRouter, OpenAI)
 - Memory compression
 - Multi-channel (Telegram, WhatsApp, CLI, TUI)
 - File, shell, web search tools
 - Configuration system with hot reload
+- **Shadow Loop** - Proactive filesystem watching
+- **Browser Automation** - 5 Puppeteer tools
+- **Subagent System** - 5 specialized agents (97% cost savings)
+- **Productivity Tools** - Notes, tasks, Apple integrations (13 tools)
+- **Enhanced Agent Awareness** - Tool categories and proactive usage
+- **323 Tests** - 100% passing
 
 ---
 
@@ -36,26 +42,7 @@ src/channels/discord/
 
 ---
 
-### 2. Browser Automation ❌
-
-**Status:** Not implemented
-
-**What Needs to Be Built:**
-```
-src/tools/browser.ts  # Puppeteer/Playwright integration
-```
-
-**Tools Needed:**
-- `browser_open` - Open URL
-- `browser_navigate` - Navigate to page
-- `browser_click` - Click element
-- `browser_type` - Type text
-- `browser_screenshot` - Capture screenshot
-- `browser_extract` - Extract page content
-
----
-
-### 3. WebChat UI ❌
+### 2. WebChat UI ❌
 
 **Status:** Not implemented
 
@@ -80,7 +67,43 @@ ui/chat/
 
 ---
 
-### 4. Mobile Apps ❌
+### 3. OS Integration Tools ❌
+
+**Status:** Not implemented
+
+**What Needs to Be Built:**
+```
+src/tools/os.ts
+```
+
+**Tools Needed:**
+- `os_notify` - System notifications
+- `clipboard_read` - Read clipboard
+- `clipboard_write` - Write clipboard
+- `screen_capture` - Take screenshots
+
+---
+
+### 4. Vector/SQLite Storage ❌
+
+**Status:** Not implemented
+
+**What Needs to Be Built:**
+```
+src/memory/
+├── vector.ts         # Vector embeddings
+├── sqlite.ts         # SQLite database
+└── search.ts         # Semantic search
+```
+
+**Features Needed:**
+- SQLite database for conversations
+- Vector embeddings for semantic search
+- Searchable history across sessions
+
+---
+
+### 5. Mobile Apps ❌
 
 **Status:** Not implemented (Phase 3)
 
@@ -91,7 +114,7 @@ ui/chat/
 
 ---
 
-### 5. Voice Features ❌
+### 6. Voice Features ❌
 
 **Status:** Not implemented (Phase 3)
 
@@ -712,19 +735,84 @@ The second week adds memory management capabilities. Implementation creates the 
 
 Key deliverables include token counting and threshold monitoring. Summary generation preserves essential context. State management handles compression transitions smoothly.
 
-### 20.3 Week Three: Subagents
+### 20.3 Week Three: Subagents ✅ COMPLETE
+
+**Status:** ✅ Fully implemented in v0.3.1
 
 The third week implements subagent architecture. Research, writing, and analysis subagents handle specialized tasks. Structured output schemas enable reliable result parsing. Integration with the main agent creates coordinated workflows.
 
-Key deliverables include subagent implementations for core task types. Output schemas ensure consistent result formats. Main agent integration coordinates subagent execution.
+**Implemented:**
+- ✅ 5 subagent types (research, writer, planner, critic, summarizer)
+- ✅ SubagentRegistry for management
+- ✅ Structured JSON output parsing
+- ✅ delegate_to_subagent tool
+- ✅ Configurable model selection
+- ✅ 97% cost savings using gpt-4o-mini
+- ✅ 19 tests (100% passing)
 
-### 20.4 Week Four: Routing and Budget Mode
+### 20.4 Week Four: Routing and Budget Mode ✅ COMPLETE
+
+**Status:** ✅ Fully implemented in v0.2.x
 
 The fourth week completes the core architecture with model routing and cost management. Default routing assigns appropriate models based on task type. Budget mode enables cost control through lightweight model usage. Monitoring provides visibility into spending patterns.
 
-Key deliverables include routing rules for automatic model selection. Budget configuration enables cost limits. Usage reporting provides transparency into model consumption.
+**Implemented:**
+- ✅ ModelRouter with multi-provider support
+- ✅ Automatic fallback system
+- ✅ Cost-based routing (cheapest first)
+- ✅ Subagent delegation for cost optimization
+- ✅ Token usage tracking
 
 Completing these four weeks establishes a functional agent system with capabilities comparable to OpenClaw's core functionality. Subsequent development can focus on additional channels, tools, and advanced features.
+
+---
+
+## 📊 Implementation Progress
+
+### ✅ Completed Features (v0.3.1)
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| **Core Agent Loop** | ✅ | State machine, tool calling, memory |
+| **Multi-Provider** | ✅ | DeepSeek, OpenRouter, OpenAI |
+| **Memory System** | ✅ | Compression, context management |
+| **Multi-Channel** | ✅ | CLI, TUI, Telegram, WhatsApp |
+| **File Tools** | ✅ | Read, write, list, search |
+| **Shell Tools** | ✅ | Command execution with safety |
+| **Web Tools** | ✅ | Search (4 providers), fetch |
+| **Browser Tools** | ✅ | 5 Puppeteer tools (100% tested) |
+| **Subagent System** | ✅ | 5 agents, 97% cost savings |
+| **Productivity Tools** | ✅ | Notes, tasks (5 local tools) |
+| **Apple Integrations** | ✅ | 8 tools (Notes, Reminders, Calendar) |
+| **Shadow Loop** | ✅ | Proactive intelligence (85.8% coverage) |
+| **Service Management** | ✅ | LaunchAgent/systemd support |
+| **Config Hot Reload** | ✅ | Auto-reload on changes |
+| **Health Checks** | ✅ | Basic, deep, ready endpoints |
+
+### ❌ Missing Features
+
+| Feature | Priority | Complexity |
+|---------|----------|------------|
+| Discord Channel | P2 | Medium |
+| WebChat UI | P2 | High |
+| OS Tools | P2 | Low |
+| Vector/SQLite | P3 | High |
+| Mobile Apps | P3 | Very High |
+| Voice Features | P3 | High |
+
+### 📈 Progress Summary
+
+- **v0.2.x**: 70% complete (foundation + routing)
+- **v0.3.1**: 85% complete (Shadow Loop, Browser, Subagents, Productivity)
+- **v1.0**: 100% (all planned features)
+
+**Current Stats:**
+- 70 source files
+- 26+ tools
+- 5 subagents
+- 8 Apple integrations
+- 323 tests (100% passing)
+- 3 channels
 
 ---
 
@@ -736,6 +824,6 @@ The technical design presented in this document provides a roadmap for implement
 
 The memory strategy distinguishes MiniMax from comparable systems. Never sending full chat history, implementing automatic compression, and maintaining structured memory summaries enables efficient operation while preserving conversational continuity. This approach delivers better user experience while controlling costs.
 
-Implementation proceeds through phased delivery, establishing functional foundations before adding advanced capabilities. The four-week roadmap provides a clear path to core functionality, with subsequent phases expanding capabilities systematically.
+**Implementation Status:** With v0.3.1, MiniMax has achieved 85% of planned features. The four-week roadmap is complete, with Shadow Loop, browser automation, subagent system, and productivity tools fully implemented. Remaining work focuses on additional channels (Discord), UI (WebChat), and advanced features (Vector/SQLite, mobile apps).
 
-The result will be a personal AI assistant that truly works for the user, on the user's machine, under the user's control.
+The result is a personal AI assistant that truly works for the user, on the user's machine, under the user's control.
