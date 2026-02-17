@@ -88,6 +88,171 @@ Talon differentiates with the **Shadow Loop** (proactive observation) and a stro
 
 ---
 
+## Test-Driven Development Strategy
+
+Talon follows **Test-Driven Development (TDD)** for all features:
+
+> **Rule:** Write tests first, then implement the feature.
+
+### TDD Workflow
+
+1. **Write failing tests** that define expected behavior
+2. **Run tests** to confirm they fail (red)
+3. **Implement feature** to make tests pass (green)
+4. **Refactor** while keeping tests green
+5. **Commit** with tests + implementation together
+
+### Test Coverage by Feature Type
+
+#### Core Features (Required - 80%+ coverage)
+
+**Status:** ✅ Tests exist, features implemented
+
+| Feature | Tests | Coverage | Status |
+|---------|-------|----------|--------|
+| Gateway Server | Integration | 80% | ✅ |
+| Agent Loop | Unit + Integration | 75% | ✅ |
+| Memory Manager | Unit | 100% | ✅ |
+| Model Router | Unit | 100% | ✅ |
+| Fallback System | Unit | 100% | ✅ |
+| Session Manager | Unit | 100% | ✅ |
+| Context Guard | Unit | 100% | ✅ |
+| Event Bus | Unit | 100% | ✅ |
+| Config System | Unit | 100% | ✅ |
+| Prompts | Unit | 100% | ✅ |
+
+**Next Core Features (TDD Required):**
+
+| Feature | Test Type | Priority |
+|---------|-----------|----------|
+| File Tools | Unit + Integration | P0 |
+| Shell Tools | Unit + Integration | P0 |
+| Web Search | Unit + Integration | P0 |
+| Memory Compression | Integration | P0 |
+| Tool Registry | Unit | P0 |
+
+---
+
+#### Optional Features (60%+ coverage)
+
+**Status:** ❌ Tests needed before implementation
+
+| Feature | Test Type | Priority | Status |
+|---------|-----------|----------|--------|
+| **Subagent System** | Unit + Integration | P1 | ❌ Write tests first |
+| **Shadow Loop** | Integration | P1 | ❌ Write tests first |
+| **Browser Automation** | Integration | P1 | ❌ Write tests first |
+| **Discord Channel** | Integration | P2 | ❌ Write tests first |
+| **WebChat UI** | E2E | P2 | ❌ Write tests first |
+| **Productivity Tools** | Unit | P2 | ❌ Write tests first |
+| **Smart Routing** | Unit | P2 | ❌ Write tests first |
+
+**TDD Example - Subagent System:**
+
+```typescript
+// tests/unit/subagents.test.ts - WRITE THIS FIRST
+describe('Subagent System', () => {
+    it('should spawn research subagent', async () => {
+        const subagent = await spawnSubagent('research', task);
+        expect(subagent.type).toBe('research');
+    });
+    
+    it('should return structured JSON', async () => {
+        const result = await subagent.execute(task);
+        expect(result).toHaveProperty('summary');
+        expect(result).toHaveProperty('findings');
+    });
+});
+
+// THEN implement src/subagents/base.ts
+```
+
+---
+
+#### Future Features (40%+ coverage)
+
+**Status:** ❌ Tests needed before implementation
+
+| Feature | Test Type | Priority | Status |
+|---------|-----------|----------|--------|
+| **Voice Features** | Integration | P3 | ❌ Write tests first |
+| **Canvas/A2UI** | E2E | P3 | ❌ Write tests first |
+| **Native Apps** | E2E | P3 | ❌ Write tests first |
+| **Vector Memory** | Unit + Integration | P2 | ❌ Write tests first |
+| **Docker Sandbox** | Integration | P1 | ❌ Write tests first |
+| **Cron Scheduler** | Unit + Integration | P2 | ❌ Write tests first |
+
+**TDD Example - Shadow Loop:**
+
+```typescript
+// tests/integration/shadow-loop.test.ts - WRITE THIS FIRST
+describe('Shadow Loop', () => {
+    it('should detect file changes', async () => {
+        const watcher = new ShadowLoop(config);
+        const events: any[] = [];
+        
+        watcher.on('file.changed', (e) => events.push(e));
+        
+        // Trigger file change
+        await fs.writeFile('/tmp/test.txt', 'content');
+        await wait(100);
+        
+        expect(events.length).toBeGreaterThan(0);
+        expect(events[0].path).toContain('test.txt');
+    });
+    
+    it('should send ghost messages for errors', async () => {
+        const watcher = new ShadowLoop(config);
+        const messages: any[] = [];
+        
+        watcher.on('ghost.message', (m) => messages.push(m));
+        
+        // Trigger error
+        await exec('npm run build-fail');
+        await wait(100);
+        
+        expect(messages.length).toBeGreaterThan(0);
+        expect(messages[0].content).toContain('error');
+    });
+});
+
+// THEN implement src/shadow/watcher.ts
+```
+
+---
+
+### Test Organization
+
+```
+tests/
+├── unit/                    # Fast, isolated tests
+│   ├── config-schema.test.ts
+│   ├── memory-manager.test.ts
+│   ├── model-router.test.ts
+│   ├── subagents.test.ts        # TODO: Write first
+│   └── ...
+├── integration/             # Component interaction tests
+│   ├── agent-loop.test.ts       # TODO: Write first
+│   ├── shadow-loop.test.ts      # TODO: Write first
+│   ├── tools.test.ts            # TODO: Write first
+│   └── channels.test.ts         # TODO: Write first
+└── e2e/                     # End-to-end tests
+    ├── webchat.test.ts          # TODO: Write first
+    └── voice.test.ts            # TODO: Write first
+```
+
+---
+
+### TDD Benefits for Talon
+
+1. **Prevents regressions** - Core features stay stable
+2. **Documents behavior** - Tests show how features work
+3. **Enables refactoring** - Change internals safely
+4. **Catches edge cases** - Think through failure modes first
+5. **Speeds development** - Less debugging, more confidence
+
+---
+
 ## Naming
 
 | Item | Name |
