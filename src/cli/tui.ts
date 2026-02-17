@@ -358,7 +358,7 @@ function showVersion(): void {
 }
 
 async function changeProvider(): Promise<void> {
-    const { select, password, confirm } = await import('@inquirer/prompts');
+    const inquirer = await import('inquirer');
     const { PROVIDERS } = await import('./providers.js');
     const { execSync } = await import('node:child_process');
     
@@ -366,9 +366,9 @@ async function changeProvider(): Promise<void> {
         const configPath = path.join(os.homedir(), '.talon', 'config.json');
         const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         
-        console.log(''); // Add spacing
-        
-        const providerId = await select({
+        const providerId = await inquirer.default.prompt({
+            type: 'list',
+            name: 'providerId',
             message: 'Choose provider:',
             choices: PROVIDERS.filter(p => p.id !== 'anthropic' && p.id !== 'custom').map(p => ({
                 name: p.name,
@@ -376,27 +376,35 @@ async function changeProvider(): Promise<void> {
             })),
         });
         
-        const provider = PROVIDERS.find(p => p.id === providerId)!;
-        const apiKey = await password({ message: `Enter ${provider.name} API key:` });
+        const provider = PROVIDERS.find(p => p.id === providerId.providerId)!;
+        const apiKey = await inquirer.default.prompt({
+            type: 'password',
+            name: 'apiKey',
+            message: `Enter ${provider.name} API key:`,
+        });
         
         // Update config
-        config.agent.providers[providerId] = {
-            apiKey,
+        config.agent.providers[providerId.providerId] = {
+            apiKey: apiKey.apiKey,
             baseUrl: provider.baseUrl,
             models: provider.models.map(m => m.id),
         };
         
-        console.log(''); // Add spacing before next prompt
-        
-        // Ask if they want to switch to this provider
-        const switchNow = await confirm({
+        const switchNow = await inquirer.default.prompt({
+            type: 'confirm',
+            name: 'switch',
             message: 'Switch to this provider now?',
             default: true,
         });
         
-        if (switchNow) {
+        if (switchNow.switch) {
             const defaultModel = provider.models[0].id;
-            config.agent.model = providerId === 'deepseek' ? defaultModel : `${providerId}/${defaultModel}`;
+            // Don't prefix if already has provider prefix
+            if (defaultModel.includes('/')) {
+                config.agent.model = defaultModel;
+            } else {
+                config.agent.model = providerId.providerId === 'deepseek' ? defaultModel : `${providerId.providerId}/${defaultModel}`;
+            }
         }
         
         // Update env
@@ -406,28 +414,27 @@ async function changeProvider(): Promise<void> {
         const regex = new RegExp(`^${envVar}=.*$`, 'm');
         
         if (regex.test(envContent)) {
-            envContent = envContent.replace(regex, `${envVar}=${apiKey}`);
+            envContent = envContent.replace(regex, `${envVar}=${apiKey.apiKey}`);
         } else {
-            envContent += `\n${envVar}=${apiKey}\n`;
+            envContent += `\n${envVar}=${apiKey.apiKey}\n`;
         }
         
         fs.writeFileSync(envPath, envContent, 'utf-8');
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
         
         console.log(chalk.green(`\n✓ Provider ${provider.name} configured`));
-        if (switchNow) {
+        if (switchNow.switch) {
             console.log(chalk.green(`✓ Switched to ${config.agent.model}`));
         }
         
-        console.log(''); // Add spacing before next prompt
-        
-        // Auto-restart gateway
-        const shouldRestart = await confirm({
+        const shouldRestart = await inquirer.default.prompt({
+            type: 'confirm',
+            name: 'restart',
             message: 'Restart gateway now?',
             default: true,
         });
         
-        if (shouldRestart) {
+        if (shouldRestart.restart) {
             console.log(chalk.dim('\n  Restarting gateway...'));
             try {
                 const cliPath = path.join(process.cwd(), 'dist', 'cli', 'index.js');
@@ -455,9 +462,8 @@ async function changeProvider(): Promise<void> {
             process.exit(0);
         }
     } catch (err: any) {
-        if (err.name !== 'ExitPromptError') {
+        if (err.name !== 'ExitError') {
             console.log(chalk.red('\n✗ Failed to change provider\n'));
-            process.exit(1);
         }
         process.exit(0);
     }
