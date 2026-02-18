@@ -189,57 +189,68 @@ export class AgentLoop {
                 }
             }
 
-            // Make LLM call with fallback support
+            // Make LLM call with fallback support + timeout to prevent hanging
             let response: LLMResponse;
 
             // Reset to default provider for this iteration
             usedProviderId = route.providerId;
             usedModel = route.model;
 
+            // Helper: race the LLM call against a timeout
+            const LLM_TIMEOUT_MS = 90_000; // 90 seconds max per LLM call
+            const llmCallWithTimeout = async (): Promise<LLMResponse> => {
+                const timeoutPromise = new Promise<never>((_, reject) => {
+                    setTimeout(() => reject(new Error(
+                        `LLM call timed out after ${LLM_TIMEOUT_MS / 1000}s — the AI provider may be overloaded`
+                    )), LLM_TIMEOUT_MS);
+                });
+
+                const llmPromise = (async () => {
+                    if (this.fallbackRouter.hasProviders()) {
+                        const failedProviders: string[] = [];
+
+                        const fallbackResult = await this.fallbackRouter.executeWithFallback({
+                            messages: context,
+                            tools: this.tools.size > 0 ? this.getToolDefinitions() : undefined,
+                            preferredProviderId: route.providerId,
+                            onAttempt: (attempt: FallbackAttempt) => {
+                                if (!attempt.success) {
+                                    failedProviders.push(attempt.providerId);
+                                }
+                            },
+                        });
+
+                        // Report any fallbacks that were used
+                        if (failedProviders.length > 0) {
+                            // Note: can't yield from inside async function, log instead
+                            logger.info({ failedProviders }, 'Some providers failed, used fallback');
+                        }
+
+                        usedProviderId = fallbackResult.providerId;
+                        usedModel = fallbackResult.model;
+
+                        if (fallbackResult.attempts.length > 1) {
+                            logger.info({
+                                attempts: fallbackResult.attempts.length,
+                                successfulProvider: usedProviderId,
+                                totalLatencyMs: fallbackResult.totalLatencyMs,
+                            }, 'Fallback succeeded');
+                        }
+
+                        return fallbackResult.response;
+                    } else {
+                        return await route.provider.chat(context, {
+                            model: route.model,
+                            tools: this.tools.size > 0 ? this.getToolDefinitions() : undefined,
+                        });
+                    }
+                })();
+
+                return Promise.race([llmPromise, timeoutPromise]);
+            };
+
             try {
-                if (this.fallbackRouter.hasProviders()) {
-                    // Use fallback router for automatic retries
-                    const failedProviders: string[] = [];
-
-                    const fallbackResult = await this.fallbackRouter.executeWithFallback({
-                        messages: context,
-                        tools: this.tools.size > 0 ? this.getToolDefinitions() : undefined,
-                        preferredProviderId: route.providerId,
-                        onAttempt: (attempt: FallbackAttempt) => {
-                            if (!attempt.success) {
-                                failedProviders.push(attempt.providerId);
-                            }
-                        },
-                    });
-
-                    // Report any fallbacks that were used
-                    if (failedProviders.length > 0) {
-                        yield {
-                            type: 'thinking',
-                            content: `Providers failed (${failedProviders.join(', ')}), using fallback...`,
-                            iteration,
-                        };
-                    }
-
-                    response = fallbackResult.response;
-                    usedProviderId = fallbackResult.providerId;
-                    usedModel = fallbackResult.model;
-
-                    // Log if we used a fallback
-                    if (fallbackResult.attempts.length > 1) {
-                        logger.info({
-                            attempts: fallbackResult.attempts.length,
-                            successfulProvider: usedProviderId,
-                            totalLatencyMs: fallbackResult.totalLatencyMs,
-                        }, 'Fallback succeeded');
-                    }
-                } else {
-                    // Direct call without fallback
-                    response = await route.provider.chat(context, {
-                        model: route.model,
-                        tools: this.tools.size > 0 ? this.getToolDefinitions() : undefined,
-                    });
-                }
+                response = await llmCallWithTimeout();
             } catch (err) {
                 this.state = 'error';
                 const message = err instanceof Error ? err.message : String(err);

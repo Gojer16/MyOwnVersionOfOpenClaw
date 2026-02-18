@@ -19,7 +19,7 @@ export interface FileChangeEvent {
  * File watcher with debouncing for memory indexing.
  */
 export class FileWatcher extends EventEmitter {
-  private watcher?: chokidar.FSWatcher;
+  private watcher?: any; // chokidar.FSWatcher
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private debounceMs: number;
 
@@ -47,11 +47,11 @@ export class FileWatcher extends EventEmitter {
       },
     });
 
-    this.watcher.on('add', (filePath) => this.handleChange('add', filePath));
-    this.watcher.on('change', (filePath) => this.handleChange('change', filePath));
-    this.watcher.on('unlink', (filePath) => this.handleChange('unlink', filePath));
+    this.watcher.on('add', (filePath: string) => this.handleChange('add', filePath));
+    this.watcher.on('change', (filePath: string) => this.handleChange('change', filePath));
+    this.watcher.on('unlink', (filePath: string) => this.handleChange('unlink', filePath));
 
-    this.watcher.on('error', (error) => {
+    this.watcher.on('error', (error: Error) => {
       logger.error({ error }, 'File watcher error');
     });
 

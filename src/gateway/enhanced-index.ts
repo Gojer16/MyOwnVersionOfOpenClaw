@@ -96,6 +96,9 @@ export class TalonGateway {
         // Initialize subagents
         await this.initializeSubagents();
         
+        // Initialize vector memory
+        await this.initializeVectorMemory();
+        
         // Initialize Shadow Loop
         await this.initializeShadowLoop();
         
@@ -211,6 +214,18 @@ export class TalonGateway {
         this.agentLoop.registerTool(createSubagentTool(registry));
         
         logger.info({ model: subagentModel }, 'Subagents initialized');
+    }
+
+    /**
+     * Initialize vector memory semantic search
+     */
+    private async initializeVectorMemory(): Promise<void> {
+        const vectorMemory = this.sessionManager.getVectorMemory();
+        if (vectorMemory) {
+            const { createMemorySearchSemanticTool } = await import('../tools/memory-search-semantic-tool.js');
+            this.agentLoop.registerTool(createMemorySearchSemanticTool(vectorMemory));
+            logger.info('Vector memory semantic search enabled');
+        }
     }
 
     /**

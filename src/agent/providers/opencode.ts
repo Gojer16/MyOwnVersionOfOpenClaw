@@ -36,14 +36,29 @@ export class OpenCodeProvider {
             ...(options?.tools ? { tools: options.tools } : {}),
         };
 
-        const response = await fetch(`${this.baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // NO Authorization header - this is the key difference
-            },
-            body: JSON.stringify(body),
-        });
+        // Add timeout to prevent hanging on slow/unresponsive API
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
+        let response: Response;
+        try {
+            response = await fetch(`${this.baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // NO Authorization header - this is the key difference
+                },
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            });
+        } catch (err) {
+            clearTimeout(timeoutId);
+            if (err instanceof Error && err.name === 'AbortError') {
+                throw new Error(`OpenCode API timeout: request took longer than 60 seconds`);
+            }
+            throw err;
+        }
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             const errorText = await response.text();

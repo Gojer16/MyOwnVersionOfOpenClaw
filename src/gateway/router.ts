@@ -27,7 +27,7 @@ export class MessageRouter {
             sessionId: session.id,
             channel: message.channel,
             sender: message.senderName,
-            text: message.text.substring(0, 50),
+            text: typeof message.text === 'string' ? message.text.substring(0, 50) : '[no text]',
             msgCount: session.messages.length,
         }, 'handleInbound called');
 
@@ -42,6 +42,9 @@ export class MessageRouter {
         session.messages.push(msg);
         session.metadata.messageCount++;
         session.metadata.lastActiveAt = Date.now();
+
+        // Index in vector memory
+        this.sessionManager.indexMessage(msg, session.id);
 
         logger.debug({ sessionId: session.id, msgId: msg.id }, 'Emitting message.inbound');
         // Emit for the agent loop to pick up

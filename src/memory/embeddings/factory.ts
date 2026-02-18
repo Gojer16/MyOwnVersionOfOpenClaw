@@ -1,3 +1,8 @@
+export type {
+  EmbeddingProvider,
+  EmbeddingProviderOptions,
+  EmbeddingProviderResult,
+} from './base.js';
 import type {
   EmbeddingProvider,
   EmbeddingProviderOptions,

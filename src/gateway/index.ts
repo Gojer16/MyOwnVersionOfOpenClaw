@@ -96,6 +96,8 @@ async function boot(): Promise<void> {
         }
 
         try {
+            let responseEmitted = false;
+
             for await (const chunk of agentLoop.run(session)) {
                 // Broadcast agent chunks to connected WebSocket clients
                 server.broadcastToSession(sessionId, {
@@ -128,7 +130,20 @@ async function boot(): Promise<void> {
 
                     logger.info({ sessionId, usage: chunk.usage }, 'Emitting message.outbound with usage');
                     eventBus.emit('message.outbound', { message: outbound, sessionId });
+                    responseEmitted = true;
                 }
+            }
+
+            // Safety net: if loop completed without any outbound message, send one
+            if (!responseEmitted) {
+                logger.warn({ sessionId }, 'Agent loop completed without emitting a response — sending fallback');
+                const lastMsg = session.messages.filter(m => m.role === 'assistant').pop();
+                const fallbackOutbound = {
+                    sessionId,
+                    text: lastMsg?.content || 'I finished processing but couldn\'t generate a response. Please try again.',
+                    metadata: { error: false },
+                };
+                eventBus.emit('message.outbound', { message: fallbackOutbound, sessionId });
             }
 
             // Persist session after agent finishes

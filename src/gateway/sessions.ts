@@ -7,9 +7,10 @@ import { nanoid } from 'nanoid';
 import { TALON_HOME } from '../config/index.js';
 import { SessionError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import type { Session, SessionState, InboundMessage } from '../utils/types.js';
+import type { Session, SessionState, InboundMessage, Message } from '../utils/types.js';
 import type { TalonConfig } from '../config/schema.js';
 import type { EventBus } from './events.js';
+import { VectorMemory, SimpleEmbeddingProvider, OpenAIEmbeddingProvider } from '../memory/vector.js';
 
 const SESSIONS_DIR = path.join(TALON_HOME, 'sessions');
 
@@ -18,11 +19,40 @@ export class SessionManager {
     private senderIndex = new Map<string, string>(); // senderId → sessionId
     private groupIndex = new Map<string, string>();   // groupId → sessionId
     private idleTimers = new Map<string, NodeJS.Timeout>();
+    private vectorMemory: VectorMemory | null = null;
 
     constructor(
         private config: TalonConfig,
         private eventBus: EventBus,
-    ) { }
+    ) {
+        // Initialize vector memory if enabled
+        if (config.vectorMemory?.enabled) {
+            const provider = config.vectorMemory.provider === 'openai' && process.env.OPENAI_API_KEY
+                ? new OpenAIEmbeddingProvider(process.env.OPENAI_API_KEY)
+                : new SimpleEmbeddingProvider();
+            
+            this.vectorMemory = new VectorMemory(provider, true);
+            logger.info('Vector memory enabled');
+        }
+    }
+
+    /**
+     * Index a message in vector memory
+     */
+    indexMessage(message: Message, sessionId: string): void {
+        if (this.vectorMemory) {
+            this.vectorMemory.addMessage(message, sessionId).catch(err => {
+                logger.error({ err }, 'Failed to index message in vector memory');
+            });
+        }
+    }
+
+    /**
+     * Get vector memory instance
+     */
+    getVectorMemory(): VectorMemory | null {
+        return this.vectorMemory;
+    }
 
     // ─── Create ───────────────────────────────────────────────────
 

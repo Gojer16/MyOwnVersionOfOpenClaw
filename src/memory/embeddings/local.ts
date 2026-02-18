@@ -37,7 +37,8 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   static async create(options: LocalEmbeddingOptions): Promise<LocalEmbeddingProvider> {
     try {
       // Dynamic import of node-llama-cpp
-      const { getLlama } = await import('node-llama-cpp');
+      // @ts-ignore - Optional dependency
+      const { getLlama } = await import('node-llama-cpp') as any;
 
       const llama = await getLlama();
 
