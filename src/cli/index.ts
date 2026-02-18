@@ -129,7 +129,8 @@ Usage: talon <command>
 
 Commands:
   setup     Run the onboarding wizard (auto-detects running gateways)
-  tui       Connect to running gateway (interactive chat)
+  tui       Connect to running gateway (interactive chat - legacy)
+  tui-new   Connect to running gateway (Ink edition - NEW!)
   provider  Add/change AI provider
   switch    Switch between configured models
   start     Start the gateway server (prevents duplicates)
@@ -267,6 +268,12 @@ Examples:
         case 'tui': {
             const { startTUI } = await import('./tui.js');
             await startTUI();
+            break;
+        }
+
+        case 'tui-new': {
+            const { startInkTUI } = await import('../tui/index.js');
+            await startInkTUI();
             break;
         }
 
