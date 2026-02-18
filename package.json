@@ -17,7 +17,10 @@
         "health": "tsx src/cli/index.ts health",
         "test": "vitest run",
         "test:watch": "vitest",
-        "test:coverage": "vitest run --coverage"
+        "test:coverage": "vitest run --coverage",
+        "test:memory": "node scripts/test-memory-hallucination.js",
+        "test:integration": "node scripts/test-hallucination-integration.js",
+        "test:all": "npm run build && npm run test:memory && npm run test:integration"
     },
     "engines": {
         "node": ">=22.0.0"
