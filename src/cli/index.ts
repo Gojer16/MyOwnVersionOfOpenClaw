@@ -122,25 +122,42 @@ Examples:
         }
 
         case 'stop': {
-            // Stop daemon via PID file
+            // Stop daemon via PID file or any running gateway
             const { isDaemonRunning, getDaemonConfig, removePidFile } = await import('../scripts/daemon.js');
             const config = getDaemonConfig();
             
-            if (!isDaemonRunning(config)) {
-                console.log('Talon is not running as daemon');
-                break;
+            let stopped = false;
+            
+            // Try daemon first
+            if (isDaemonRunning(config)) {
+                try {
+                    const pid = parseInt(fs.readFileSync(config.pidFile, 'utf-8').trim(), 10);
+                    process.kill(pid, 'SIGTERM');
+                    console.log('✓ Talon daemon stopping...');
+                    setTimeout(() => {
+                        removePidFile(config);
+                        console.log('✓ Talon daemon stopped');
+                    }, 2000);
+                    stopped = true;
+                } catch {
+                    console.log('✗ Failed to stop daemon');
+                }
             }
             
+            // Try to kill any running gateway process
             try {
-                const pid = parseInt(fs.readFileSync(config.pidFile, 'utf-8').trim(), 10);
-                process.kill(pid, 'SIGTERM');
-                console.log('Talon stopping...');
-                setTimeout(() => {
-                    removePidFile(config);
-                    console.log('Talon stopped');
-                }, 2000);
+                const { execSync } = await import('child_process');
+                execSync('pkill -f "node.*gateway" || pkill -f "talon.*start"', { stdio: 'ignore' });
+                if (!stopped) {
+                    console.log('✓ Stopped running gateway');
+                    stopped = true;
+                }
             } catch {
-                console.log('Failed to stop Talon');
+                // Ignore - no process found
+            }
+            
+            if (!stopped) {
+                console.log('ℹ Talon is not running');
             }
             break;
         }
