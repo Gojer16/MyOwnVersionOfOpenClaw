@@ -128,22 +128,24 @@ async function main(): Promise<void> {
 Usage: talon <command>
 
 Commands:
-  setup     Run the onboarding wizard
+  setup     Run the onboarding wizard (auto-detects running gateways)
   tui       Connect to running gateway (interactive chat)
   provider  Add/change AI provider
   switch    Switch between configured models
-  start     Start the gateway server (add --daemon to run in background)
-  stop      Stop a running daemon
+  start     Start the gateway server (prevents duplicates)
+  stop      Stop any running gateway (safe process detection)
   restart   Restart the daemon
   health    Check if the gateway is running
   status    Show detailed status and sessions
   service   Manage system service (install/uninstall/start/stop/restart/status)
 
 Examples:
-  talon setup           # First-time setup
+  talon setup           # First-time setup (stops old gateways)
   talon tui             # Interactive chat (connect to gateway)
   talon provider        # Add/change AI provider
   talon switch          # Switch model
+  talon start           # Start gateway (checks for duplicates)
+  talon stop            # Stop all Talon gateways safely
   talon start --daemon  # Start as background service
   talon service install # Install as system service
   talon health          # Quick health check

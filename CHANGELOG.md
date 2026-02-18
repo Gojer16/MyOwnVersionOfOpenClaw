@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Error Handling**: Rate limit detection and automatic fallback
 - **Cost Savings**: 100% free vs $126/month (DeepSeek)
 
+#### Gateway Protection & Safety
+- **Auto-Detection**: `talon setup` detects and offers to stop running gateways
+- **Duplicate Prevention**: `talon start` prevents multiple gateways on same port
+- **Safe Process Killing**: Verifies process is Talon before terminating
+- **Port-Based Detection**: Uses `lsof` to find all processes on port 19789
+- **Process Verification**: Checks command line contains "talon" or "gateway"
+- **Multi-Gateway Support**: Handles multiple PIDs safely
+
 #### Documentation
 - **OPENCODE_INTEGRATION.md**: Comprehensive integration guide
 - **OPENCODE_QUICKSTART.md**: 2-minute setup guide
@@ -35,10 +43,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Default Provider**: OpenCode set as default in `config.example.json`
 - **Model Router**: OpenCode prioritized first for cost optimization
 - **Provider Definitions**: OpenCode listed first in CLI
+- **talon stop**: Now uses port-based detection (more reliable)
+- **talon start**: Checks for existing gateway before starting
+- **talon setup**: Prompts to stop running gateways
+
+### 🐛 Fixed
+- **Setup Wizard**: Skip model check for OpenCode (no auth needed)
+- **Gateway Detection**: Improved process detection reliability
+- **Process Safety**: Won't kill non-Talon processes on port 19789
+- **Config Conflicts**: Prevents old gateways from using stale config
 
 ### 📚 Documentation
 - Updated README with OpenCode features
 - Added OpenCode to `.env.example` with usage notes
+- Updated CLI help text with new safety features
 - Comprehensive test documentation
 
 ## [0.3.1] - 2026-02-17

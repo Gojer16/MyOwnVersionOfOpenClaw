@@ -364,13 +364,16 @@ The setup wizard will:
 ### CLI Commands
 
 ```bash
-talon setup          # First-time setup wizard
-talon start          # Start with interactive CLI
+talon setup          # First-time setup wizard (auto-detects running gateways)
+talon start          # Start with interactive CLI (prevents duplicates)
 talon start --daemon # Start in background
-talon stop           # Stop running daemon
+talon stop           # Stop all running gateways (safe process detection)
 talon restart        # Restart daemon
 talon health         # Quick health check
 talon status         # Detailed status
+talon provider       # Add/change AI provider
+talon switch         # Switch between models
+talon tui            # Interactive TUI (connect to gateway)
 ```
 5. Set up your phone number for WhatsApp
 
