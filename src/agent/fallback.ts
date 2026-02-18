@@ -4,12 +4,13 @@
 
 import { logger } from '../utils/logger.js';
 import type { OpenAICompatibleProvider, LLMResponse, LLMMessage, LLMTool } from './providers/openai-compatible.js';
+import type { OpenCodeProvider } from './providers/opencode.js';
 
 // ─── Types ────────────────────────────────────────────────────────
 
 export interface FallbackProvider {
     id: string;
-    provider: OpenAICompatibleProvider;
+    provider: OpenAICompatibleProvider | OpenCodeProvider;
     model: string;
     priority: number; // Lower = higher priority
 }
@@ -59,10 +60,11 @@ export function classifyError(error: unknown, providerId: string): FallbackError
         };
     }
     
-    // Rate limit - retry with fallback
+    // Rate limit - retry with fallback (common with OpenCode free models)
     if (lowerMessage.includes('429') ||
         lowerMessage.includes('rate limit') ||
-        lowerMessage.includes('too many requests')) {
+        lowerMessage.includes('too many requests') ||
+        lowerMessage.includes('freeusagelimiterror')) {
         return {
             type: 'rate-limit',
             message: `Rate limited on ${providerId}: ${message}`,
@@ -102,6 +104,16 @@ export function classifyError(error: unknown, providerId: string): FallbackError
         return {
             type: 'billing',
             message: `Billing/quota issue on ${providerId}: ${message}`,
+            retryable: true,
+            providerId,
+        };
+    }
+    
+    // Model disabled (OpenCode specific)
+    if (lowerMessage.includes('model is disabled') || lowerMessage.includes('modelerror')) {
+        return {
+            type: 'unknown',
+            message: `Model disabled on ${providerId}: ${message}`,
             retryable: true,
             providerId,
         };
