@@ -167,23 +167,30 @@ async function stepModelAuth(): Promise<WizardResult['agent']> {
     // Known provider flow
     const provider = PROVIDERS.find(p => p.id === providerId)!;
 
-    // Check for existing env var
-    const existingKey = process.env[provider.envVar];
+    // OpenCode doesn't need API key
     let apiKey: string;
-
-    if (existingKey) {
-        console.log(chalk.green(`  ✓ Found ${provider.envVar} in environment`));
-        const useExisting = await confirm({
-            message: `Use existing ${provider.envVar}?`,
-            default: true,
-        });
-        apiKey = useExisting ? existingKey : await password({
-            message: `Enter your ${provider.name} API key:`,
-        });
+    
+    if (providerId === 'opencode') {
+        apiKey = 'sk-opencode-free-no-key-required';
+        console.log(chalk.green('  ✓ OpenCode is 100% FREE - no API key needed!'));
     } else {
-        apiKey = await password({
-            message: `Enter your ${provider.name} API key:`,
-        });
+        // Check for existing env var
+        const existingKey = process.env[provider.envVar];
+
+        if (existingKey) {
+            console.log(chalk.green(`  ✓ Found ${provider.envVar} in environment`));
+            const useExisting = await confirm({
+                message: `Use existing ${provider.envVar}?`,
+                default: true,
+            });
+            apiKey = useExisting ? existingKey : await password({
+                message: `Enter your ${provider.name} API key:`,
+            });
+        } else {
+            apiKey = await password({
+                message: `Enter your ${provider.name} API key:`,
+            });
+        }
     }
 
     // Pick default model
@@ -658,15 +665,24 @@ function saveConfig(result: WizardResult): void {
         const providerDef = PROVIDERS.find(pr => pr.id === id);
         const envVar = providerDef?.envVar ?? `${id.toUpperCase()}_API_KEY`;
 
-        providers[id] = {
-            apiKey: `\${${envVar}}`,
-            ...(p.baseUrl && { baseUrl: p.baseUrl }),
-            ...(p.models && { models: p.models }),
-        };
+        // OpenCode doesn't use env var - hardcode the placeholder
+        if (id === 'opencode') {
+            providers[id] = {
+                apiKey: 'sk-opencode-free-no-key-required',
+                ...(p.baseUrl && { baseUrl: p.baseUrl }),
+                ...(p.models && { models: p.models }),
+            };
+        } else {
+            providers[id] = {
+                apiKey: `\${${envVar}}`,
+                ...(p.baseUrl && { baseUrl: p.baseUrl }),
+                ...(p.models && { models: p.models }),
+            };
 
-        // Save the actual API key to .env file
-        if (p.apiKey) {
-            saveEnvVar(envVar, p.apiKey);
+            // Save the actual API key to .env file
+            if (p.apiKey) {
+                saveEnvVar(envVar, p.apiKey);
+            }
         }
     }
 
