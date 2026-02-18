@@ -47,6 +47,43 @@ interface WizardResult {
 
 // ─── Banner ───────────────────────────────────────────────────────
 
+async function checkAndStopRunningGateway(): Promise<void> {
+    try {
+        const { execSync } = await import('child_process');
+        const lsofOutput = execSync('lsof -ti :19789 2>/dev/null || true', { encoding: 'utf-8' }).trim();
+        
+        if (lsofOutput) {
+            const pids = lsofOutput.split('\n').filter(Boolean);
+            console.log(chalk.yellow(`\n  ⚠️  Found ${pids.length} running gateway process(es)`));
+            console.log(chalk.dim(`     PIDs: ${pids.join(', ')}\n`));
+            
+            const shouldStop = await confirm({
+                message: 'Stop running gateway before setup?',
+                default: true,
+            });
+            
+            if (shouldStop) {
+                for (const pid of pids) {
+                    try {
+                        process.kill(parseInt(pid, 10), 'SIGTERM');
+                        console.log(chalk.green(`  ✓ Stopped gateway (PID ${pid})`));
+                    } catch {
+                        console.log(chalk.red(`  ✗ Failed to stop PID ${pid}`));
+                    }
+                }
+                // Wait for processes to stop
+                await new Promise(r => setTimeout(r, 1000));
+            } else {
+                console.log(chalk.yellow('  ⚠️  Continuing with gateway running (may cause conflicts)\n'));
+            }
+        }
+    } catch {
+        // Ignore errors - no gateway running
+    }
+}
+
+// ─── Banner ───────────────────────────────────────────────────────
+
 
 function printBanner(): void {
     const now = new Date();
@@ -814,7 +851,10 @@ function saveEnvVar(key: string, value: string): void {
 export async function runWizard(): Promise<void> {
     printBanner();
 
-    // Step 0: Check existing config
+    // Step 0: Check for running gateway and offer to stop it
+    await checkAndStopRunningGateway();
+
+    // Step 1: Check existing config
     const action = await detectExistingConfig();
     if (action === 'keep') {
         console.log(chalk.green('\n  ✓ Keeping existing config. Run `talon start` to begin.\n'));

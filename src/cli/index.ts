@@ -21,6 +21,21 @@ async function main(): Promise<void> {
         case 'start': {
             const isDaemon = flags.includes('--daemon') || flags.includes('-d');
             
+            // Check for running gateway
+            try {
+                const { execSync } = await import('child_process');
+                const lsofOutput = execSync('lsof -ti :19789 2>/dev/null || true', { encoding: 'utf-8' }).trim();
+                
+                if (lsofOutput) {
+                    const pids = lsofOutput.split('\n').filter(Boolean);
+                    console.log(`⚠️  Gateway already running (PID: ${pids.join(', ')})`);
+                    console.log('   Run `talon stop` first, or use `talon restart`');
+                    process.exit(1);
+                }
+            } catch {
+                // Ignore - no gateway running
+            }
+            
             if (isDaemon) {
                 // Suppress logs in daemon mode
                 process.env.LOG_LEVEL = 'silent';
