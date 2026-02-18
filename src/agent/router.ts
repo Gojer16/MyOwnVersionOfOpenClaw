@@ -10,6 +10,7 @@ import {
     createCustomProvider,
     type ProviderConfig,
 } from './providers/openai-compatible.js';
+import { OpenCodeProvider, createOpenCodeProviderNoAuth } from './providers/opencode.js';
 import { logger } from '../utils/logger.js';
 
 // ─── Task Complexity Levels ───────────────────────────────────────
@@ -19,7 +20,7 @@ export type TaskComplexity = 'simple' | 'moderate' | 'complex' | 'summarize';
 // ─── Router ───────────────────────────────────────────────────────
 
 export class ModelRouter {
-    private providers = new Map<string, OpenAICompatibleProvider>();
+    private providers = new Map<string, OpenAICompatibleProvider | OpenCodeProvider>();
     private defaultModel: string;
 
     constructor(private config: TalonConfig) {
@@ -33,6 +34,14 @@ export class ModelRouter {
     private initializeProviders(): void {
         for (const [id, provConfig] of Object.entries(this.config.agent.providers)) {
             const apiKey = provConfig.apiKey ?? '';
+
+            // OpenCode doesn't require API key and uses special provider
+            if (id === 'opencode') {
+                const provider = createOpenCodeProviderNoAuth();
+                this.providers.set(id, provider);
+                logger.info({ provider: id }, 'OpenCode provider initialized (no auth)');
+                continue;
+            }
 
             if (!apiKey || apiKey.startsWith('${')) {
                 logger.debug({ provider: id }, 'Skipping provider — no API key');
@@ -79,7 +88,7 @@ export class ModelRouter {
      * - complex → best available (reasoning models)
      */
     getProviderForTask(complexity: TaskComplexity): {
-        provider: OpenAICompatibleProvider;
+        provider: OpenAICompatibleProvider | OpenCodeProvider;
         model: string;
         providerId: string;
     } | null {
@@ -160,7 +169,7 @@ export class ModelRouter {
      * Get the default provider (used for the main agent loop).
      */
     getDefaultProvider(): {
-        provider: OpenAICompatibleProvider;
+        provider: OpenAICompatibleProvider | OpenCodeProvider;
         model: string;
         providerId: string;
     } | null {
@@ -181,7 +190,14 @@ export class ModelRouter {
             case 'simple':
             case 'summarize':
                 // Pick from known cheap models
-                const cheapModels = ['deepseek-chat', 'gpt-4o-mini', 'deepseek/deepseek-chat-v3-0324'];
+                const cheapModels = [
+                    'minimax-m2.5-free',
+                    'big-pickle',
+                    'glm-5-free',
+                    'deepseek-chat',
+                    'gpt-4o-mini',
+                    'deepseek/deepseek-chat-v3-0324',
+                ];
                 return models.find(m => cheapModels.some(cm => m.includes(cm))) ?? models[0];
 
             case 'complex':
@@ -198,8 +214,8 @@ export class ModelRouter {
     /**
      * Provider cost ranking (cheapest first).
      */
-    private findCheapestProvider(): { id: string; provider: OpenAICompatibleProvider } | null {
-        const costOrder = ['deepseek', 'openrouter', 'openai', 'anthropic'];
+    private findCheapestProvider(): { id: string; provider: OpenAICompatibleProvider | OpenCodeProvider } | null {
+        const costOrder = ['opencode', 'deepseek', 'openrouter', 'openai', 'anthropic'];
         for (const id of costOrder) {
             const provider = this.providers.get(id);
             if (provider) return { id, provider };
@@ -212,8 +228,8 @@ export class ModelRouter {
     /**
      * Provider quality ranking (best first).
      */
-    private findBestProvider(): { id: string; provider: OpenAICompatibleProvider } | null {
-        const qualityOrder = ['anthropic', 'openai', 'openrouter', 'deepseek'];
+    private findBestProvider(): { id: string; provider: OpenAICompatibleProvider | OpenCodeProvider } | null {
+        const qualityOrder = ['anthropic', 'openai', 'openrouter', 'deepseek', 'opencode'];
         for (const id of qualityOrder) {
             const provider = this.providers.get(id);
             if (provider) return { id, provider };
@@ -232,8 +248,8 @@ export class ModelRouter {
     /**
      * Get all providers for fallback routing.
      */
-    getAllProviders(): Array<{ id: string; provider: OpenAICompatibleProvider; model: string }> {
-        const result: Array<{ id: string; provider: OpenAICompatibleProvider; model: string }> = [];
+    getAllProviders(): Array<{ id: string; provider: OpenAICompatibleProvider | OpenCodeProvider; model: string }> {
+        const result: Array<{ id: string; provider: OpenAICompatibleProvider | OpenCodeProvider; model: string }> = [];
 
         for (const [id, provider] of this.providers.entries()) {
             const models = this.config.agent.providers[id]?.models ?? [];
