@@ -5,6 +5,19 @@ All notable changes to Talon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### ✨ Added
+
+#### TUI Response Formatting
+- **Clean AI Output**: Removes ugly `**` markdown bold syntax from AI responses
+- **Colored Bullets**: Converts `-` bullet points to cyan `•` for better readability
+- **formatAIResponse()**: New utility function in `src/channels/cli/utils.ts`
+- **Automatic Formatting**: All AI responses are automatically formatted before display
+
+### 🔧 Changed
+- **TUI Display**: AI responses now render cleaner without markdown artifacts
+
 ## [0.3.2] - 2026-02-17
 
 ### ✨ Added
