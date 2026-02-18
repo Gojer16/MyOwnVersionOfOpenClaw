@@ -4,7 +4,7 @@
 
 This repository is designed to be **open source** and **public**, but your **personal data must remain private**.
 
-## 📁 The Separation
+## 📁 The Separation (Updated v0.3.3+)
 
 ### ✅ What's Safe to Commit (Public)
 
@@ -12,9 +12,12 @@ These are generic templates and source code:
 
 ```
 templates/workspace/          # Generic template files (safe)
-  ├── SOUL.md                # Template - users customize their own
-  ├── USER.md                # Template - users fill in their info
+  ├── SOUL.md                # Template with frontmatter - users customize their own
+  ├── USER.md                # Template with frontmatter - users fill in their info
+  ├── IDENTITY.md            # Template with frontmatter - AI identity
+  ├── BOOTSTRAP.md           # Template with frontmatter - first-run ritual
   ├── AGENTS.md              # Generic operating manual
+  ├── MEMORY.md              # Empty memory template
   ├── FACTS.json             # Empty template
   └── ...
 
@@ -23,6 +26,7 @@ docs/                        # Documentation (safe)
 scripts/                     # Setup scripts (safe)
 config.example.json          # Template config (safe)
 .env.example                 # Template env vars (safe)
+workspace/                   # Empty directory with README (safe)
 ```
 
 ### ❌ What's PRIVATE (Never Commit)
@@ -30,18 +34,56 @@ config.example.json          # Template config (safe)
 These contain YOUR personal data:
 
 ```
-~/.talon/                    # Your personal data directory
+~/.talon/                    # Your personal data directory (GITIGNORED)
   ├── config.json            # Your API keys and settings
   ├── .env                   # Your secrets
   ├── workspace/             # YOUR AI's personality and memories
-  │   ├── SOUL.md            # YOUR AI's evolving personality
-  │   ├── USER.md            # Information about YOU
+  │   ├── SOUL.md            # YOUR AI's evolving personality (NO frontmatter)
+  │   ├── USER.md            # Information about YOU (NO frontmatter)
+  │   ├── IDENTITY.md        # YOUR AI's chosen identity (NO frontmatter)
+  │   ├── BOOTSTRAP.md       # Deleted after first run
   │   ├── FACTS.json         # Facts the AI learned about you
   │   ├── MEMORY.md          # YOUR conversation memories
-  │   └── ...
+  │   └── memory/            # Daily memory logs
   ├── sessions/              # Your chat history
   └── whatsapp-auth/         # WhatsApp session data
+
+./workspace/                 # Local dev workspace (GITIGNORED)
+  └── README.md              # Explanation only (safe to commit)
 ```
+
+## 🔄 How Templates Work (v0.3.3+)
+
+### Template Structure
+
+Templates in `templates/workspace/` have **YAML frontmatter**:
+
+```markdown
+---
+summary: "Agent identity record"
+read_when:
+  - Bootstrapping a workspace manually
+---
+
+# IDENTITY
+
+Fill this in during your first conversation...
+```
+
+### First Run Process
+
+1. **Setup runs**: `npm run setup` or `npm start` (first time)
+2. **Templates copied**: Files copied from `templates/workspace/` → `~/.talon/workspace/`
+3. **Frontmatter stripped**: YAML metadata removed, only content remains
+4. **User customizes**: You fill in your personal information
+5. **AI learns**: Files evolve with your interactions
+
+### Security Benefits
+
+- ✅ **Templates are generic**: No personal data in repository
+- ✅ **Frontmatter stripped**: User files are clean markdown
+- ✅ **Isolated storage**: User data in `~/.talon/` (gitignored)
+- ✅ **Safe cloning**: Fresh clones get clean templates only
 
 ## 🚨 Why This Matters
 
@@ -51,12 +93,14 @@ Your AI learns about you over time:
 
 1. **SOUL.md** starts generic, but evolves to reflect your AI's personality based on your interactions
 2. **USER.md** contains personal information about you (name, preferences, projects)
-3. **FACTS.json** stores facts the AI learns ("User prefers dark mode", "User is working on X project")
-4. **MEMORY.md** contains summaries of your private conversations
-5. **Sessions** contain your chat history
+3. **IDENTITY.md** contains your AI's chosen name, emoji, and personality
+4. **FACTS.json** stores facts the AI learns ("User prefers dark mode", "User is working on X project")
+5. **MEMORY.md** contains summaries of your private conversations
+6. **Sessions** contain your chat history
 
 If you commit these, you're sharing:
 - Your identity and personal details
+- Your AI's personality and identity
 - Your private conversations
 - Your preferences and habits
 - Your projects and work
@@ -171,6 +215,49 @@ When someone clones your repo:
 3. They fill in their own data
 4. Their personal data stays in `~/.talon/` (gitignored)
 5. They can safely push code changes without exposing personal data
+
+## 🔄 Migrating from Older Versions (v0.3.2 and earlier)
+
+If you're upgrading from an older version where workspace files were in `./workspace/`:
+
+### Automatic Migration
+
+Run the migration script:
+
+```bash
+./scripts/migrate-workspace.sh
+```
+
+This will:
+1. ✅ Backup existing `~/.talon/workspace/` (if it exists)
+2. ✅ Copy files from `./workspace/` → `~/.talon/workspace/`
+3. ✅ Clean `./workspace/` directory (keeps it empty)
+4. ✅ Preserve all your personal data
+
+### Manual Migration
+
+If you prefer to migrate manually:
+
+```bash
+# 1. Create backup
+cp -r ~/.talon/workspace ~/.talon/workspace-backup-$(date +%Y%m%d)
+
+# 2. Copy files
+cp -r ./workspace/* ~/.talon/workspace/
+
+# 3. Clean repo workspace
+rm -rf ./workspace/*
+
+# 4. Verify
+ls ~/.talon/workspace/
+```
+
+### After Migration
+
+1. **Test the agent**: `npm start`
+2. **Verify it remembers you**: Check if it knows your name
+3. **Check files**: `ls ~/.talon/workspace/`
+4. **Commit the cleanup**: `git status` should show no workspace files
 
 ## 📋 Checklist Before Making Repo Public
 
