@@ -18,6 +18,18 @@ interface Provider {
 
 const PROVIDERS: Provider[] = [
     {
+        id: 'opencode',
+        name: 'OpenCode (FREE)',
+        envVar: 'OPENCODE_API_KEY',
+        baseUrl: 'https://opencode.ai/zen/v1',
+        models: [
+            { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free' },
+            { id: 'big-pickle', name: 'Big Pickle Free' },
+            { id: 'glm-5-free', name: 'GLM 5 Free' },
+            { id: 'kimi-k2.5-free', name: 'Kimi K2.5 Free' },
+        ],
+    },
+    {
         id: 'deepseek',
         name: 'DeepSeek',
         envVar: 'DEEPSEEK_API_KEY',
@@ -56,45 +68,52 @@ export async function addProvider(): Promise<void> {
 
     const provider = PROVIDERS.find(p => p.id === providerId)!;
     
-    // Check if API key already exists
-    const envPath = path.join(os.homedir(), '.talon', '.env');
-    let existingKey = '';
-    
-    if (fs.existsSync(envPath)) {
-        const envContent = fs.readFileSync(envPath, 'utf-8');
-        const match = envContent.match(new RegExp(`^${provider.envVar}=(.*)$`, 'm'));
-        if (match) {
-            existingKey = match[1];
-        }
-    }
-
     let apiKey: string;
     
-    if (existingKey) {
-        const { useExisting } = await inquirer.prompt({
-            type: 'confirm',
-            name: 'useExisting',
-            message: `Use existing ${provider.name} API key?`,
-            default: true,
-        });
+    // OpenCode doesn't need API key (use your OpenCode key if you have one)
+    if (providerId === 'opencode') {
+        apiKey = 'sk-opencode-free-no-key-required';
+        console.log(chalk.green('  ✓ OpenCode is FREE - no API key needed!\n'));
+        console.log(chalk.dim('    (You can optionally provide your OpenCode API key for higher limits)\n'));
+    } else {
+        // Check if API key already exists
+        const envPath = path.join(os.homedir(), '.talon', '.env');
+        let existingKey = '';
         
-        if (useExisting) {
-            apiKey = existingKey;
+        if (fs.existsSync(envPath)) {
+            const envContent = fs.readFileSync(envPath, 'utf-8');
+            const match = envContent.match(new RegExp(`^${provider.envVar}=(.*)$`, 'm'));
+            if (match) {
+                existingKey = match[1];
+            }
+        }
+        
+        if (existingKey) {
+            const { useExisting } = await inquirer.prompt({
+                type: 'confirm',
+                name: 'useExisting',
+                message: `Use existing ${provider.name} API key?`,
+                default: true,
+            });
+            
+            if (useExisting) {
+                apiKey = existingKey;
+            } else {
+                const { newKey } = await inquirer.prompt({
+                    type: 'password',
+                    name: 'newKey',
+                    message: `Enter new ${provider.name} API key:`,
+                });
+                apiKey = newKey;
+            }
         } else {
             const { newKey } = await inquirer.prompt({
                 type: 'password',
                 name: 'newKey',
-                message: `Enter new ${provider.name} API key:`,
+                message: `Enter ${provider.name} API key:`,
             });
             apiKey = newKey;
         }
-    } else {
-        const { newKey } = await inquirer.prompt({
-            type: 'password',
-            name: 'newKey',
-            message: `Enter ${provider.name} API key:`,
-        });
-        apiKey = newKey;
     }
 
     // Fetch OpenRouter models if needed
@@ -116,22 +135,26 @@ export async function addProvider(): Promise<void> {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     
     config.agent.providers[providerId] = {
-        apiKey: `\${${provider.envVar}}`,
+        apiKey: providerId === 'opencode' ? 'sk-opencode-free-no-key-required' : `\${${provider.envVar}}`,
         baseUrl: provider.baseUrl,
         models: models.map(m => m.id),
     };
 
-    // Update env
-    let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
-    const regex = new RegExp(`^${provider.envVar}=.*$`, 'm');
-    
-    if (regex.test(envContent)) {
-        envContent = envContent.replace(regex, `${provider.envVar}=${apiKey}`);
-    } else {
-        envContent += `\n${provider.envVar}=${apiKey}\n`;
+    // Update env (skip for OpenCode)
+    if (providerId !== 'opencode') {
+        const envPath = path.join(os.homedir(), '.talon', '.env');
+        let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+        const regex = new RegExp(`^${provider.envVar}=.*$`, 'm');
+        
+        if (regex.test(envContent)) {
+            envContent = envContent.replace(regex, `${provider.envVar}=${apiKey}`);
+        } else {
+            envContent += `\n${provider.envVar}=${apiKey}\n`;
+        }
+        
+        fs.writeFileSync(envPath, envContent, 'utf-8');
     }
     
-    fs.writeFileSync(envPath, envContent, 'utf-8');
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     
     console.log(chalk.green(`\n✓ Provider ${provider.name} configured`));
