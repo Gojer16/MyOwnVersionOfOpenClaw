@@ -54,8 +54,27 @@ async function checkAndStopRunningGateway(): Promise<void> {
         
         if (lsofOutput) {
             const pids = lsofOutput.split('\n').filter(Boolean);
-            console.log(chalk.yellow(`\n  ⚠️  Found ${pids.length} running gateway process(es)`));
-            console.log(chalk.dim(`     PIDs: ${pids.join(', ')}\n`));
+            
+            // Verify these are actually Talon processes
+            const talonPids: string[] = [];
+            for (const pid of pids) {
+                try {
+                    const cmdline = execSync(`ps -p ${pid} -o command= 2>/dev/null || true`, { encoding: 'utf-8' }).trim();
+                    // Check if it's a Talon process (contains 'talon' or 'gateway')
+                    if (cmdline.toLowerCase().includes('talon') || cmdline.toLowerCase().includes('gateway')) {
+                        talonPids.push(pid);
+                    }
+                } catch {
+                    // Ignore - process might have died
+                }
+            }
+            
+            if (talonPids.length === 0) {
+                return; // No Talon gateways found
+            }
+            
+            console.log(chalk.yellow(`\n  ⚠️  Found ${talonPids.length} running Talon gateway(s)`));
+            console.log(chalk.dim(`     PIDs: ${talonPids.join(', ')}\n`));
             
             const shouldStop = await confirm({
                 message: 'Stop running gateway before setup?',
@@ -63,7 +82,7 @@ async function checkAndStopRunningGateway(): Promise<void> {
             });
             
             if (shouldStop) {
-                for (const pid of pids) {
+                for (const pid of talonPids) {
                     try {
                         process.kill(parseInt(pid, 10), 'SIGTERM');
                         console.log(chalk.green(`  ✓ Stopped gateway (PID ${pid})`));

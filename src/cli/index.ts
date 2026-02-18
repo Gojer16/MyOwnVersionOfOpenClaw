@@ -28,9 +28,25 @@ async function main(): Promise<void> {
                 
                 if (lsofOutput) {
                     const pids = lsofOutput.split('\n').filter(Boolean);
-                    console.log(`⚠️  Gateway already running (PID: ${pids.join(', ')})`);
-                    console.log('   Run `talon stop` first, or use `talon restart`');
-                    process.exit(1);
+                    
+                    // Verify these are actually Talon processes
+                    const talonPids: string[] = [];
+                    for (const pid of pids) {
+                        try {
+                            const cmdline = execSync(`ps -p ${pid} -o command= 2>/dev/null || true`, { encoding: 'utf-8' }).trim();
+                            if (cmdline.toLowerCase().includes('talon') || cmdline.toLowerCase().includes('gateway')) {
+                                talonPids.push(pid);
+                            }
+                        } catch {
+                            // Ignore
+                        }
+                    }
+                    
+                    if (talonPids.length > 0) {
+                        console.log(`⚠️  Talon gateway already running (PID: ${talonPids.join(', ')})`);
+                        console.log('   Run `talon stop` first, or use `talon restart`');
+                        process.exit(1);
+                    }
                 }
             } catch {
                 // Ignore - no gateway running
@@ -166,12 +182,18 @@ Examples:
                 const lsofOutput = execSync('lsof -ti :19789 2>/dev/null || true', { encoding: 'utf-8' }).trim();
                 if (lsofOutput) {
                     const pids = lsofOutput.split('\n').filter(Boolean);
+                    
+                    // Verify these are Talon processes before killing
                     for (const pid of pids) {
                         try {
-                            process.kill(parseInt(pid, 10), 'SIGTERM');
-                            if (!stopped) {
-                                console.log('✓ Stopped running gateway');
-                                stopped = true;
+                            const cmdline = execSync(`ps -p ${pid} -o command= 2>/dev/null || true`, { encoding: 'utf-8' }).trim();
+                            // Only kill if it's a Talon process
+                            if (cmdline.toLowerCase().includes('talon') || cmdline.toLowerCase().includes('gateway')) {
+                                process.kill(parseInt(pid, 10), 'SIGTERM');
+                                if (!stopped) {
+                                    console.log('✓ Stopped running gateway');
+                                    stopped = true;
+                                }
                             }
                         } catch {
                             // Ignore
