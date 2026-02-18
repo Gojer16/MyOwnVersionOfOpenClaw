@@ -266,6 +266,13 @@ ${availableTools.length > 0 ? availableTools.map(t => `- ${t}`).join('\n') : '(N
 - apple_reminders_add, apple_reminders_list, apple_reminders_complete - Apple Reminders (macOS)
 - apple_calendar_create_event, apple_calendar_list_events, apple_calendar_delete_event - Apple Calendar (macOS)
 
+**Apple Mail (macOS only):**
+- apple_mail_list_emails - List emails from inbox (newest first)
+- apple_mail_get_recent - Get emails from last N hours
+- apple_mail_search - Search emails by subject/sender/content
+- apple_mail_get_email_content - Read full content of a specific email
+- apple_mail_count - Count total/unread emails
+
 **Browser Automation (Safari via AppleScript - macOS only):**
 - apple_safari_navigate - Open URLs in Safari
 - apple_safari_get_info - Get current page title and URL

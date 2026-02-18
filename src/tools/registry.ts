@@ -15,6 +15,7 @@ import { appleNotesTools } from './apple-notes.js';
 import { appleRemindersTools } from './apple-reminders.js';
 import { appleCalendarTools } from './apple-calendar.js';
 import { appleSafariTools } from './apple-safari.js';
+import { appleMailTools } from './apple-mail.js';
 import { logger } from '../utils/logger.js';
 
 export interface ToolDefinition {
@@ -88,13 +89,13 @@ export function registerAllTools(agentLoop: AgentLoop, config: TalonConfig): voi
             safariCount: appleSafariTools.length
         }, 'Apple tool counts');
         
-        for (const tool of [...appleNotesTools, ...appleRemindersTools, ...appleCalendarTools, ...appleSafariTools]) {
+        for (const tool of [...appleNotesTools, ...appleRemindersTools, ...appleCalendarTools, ...appleSafariTools, ...appleMailTools]) {
             agentLoop.registerTool(tool);
             registered.push(tool.name);
             logger.debug({ toolName: tool.name }, 'Registered Apple tool');
         }
         logger.info({ 
-            totalAppleTools: appleNotesTools.length + appleRemindersTools.length + appleCalendarTools.length + appleSafariTools.length 
+            totalAppleTools: appleNotesTools.length + appleRemindersTools.length + appleCalendarTools.length + appleSafariTools.length + appleMailTools.length
         }, 'Apple integrations enabled');
     } else {
         logger.warn({ platform: process.platform }, 'Not macOS - skipping Apple tools');

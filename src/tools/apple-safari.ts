@@ -104,23 +104,20 @@ end tell`;
             const maxLength = (args.maxLength as number) || 5000;
 
             try {
-                let jsCode: string;
+                // Build JavaScript code to execute
+                let jsLogic: string;
                 if (selector) {
-                    jsCode = `(() => {
-                        const el = document.querySelector('${escapeAppleScript(selector)}');
-                        if (!el) return 'Element not found: ${escapeAppleScript(selector)}';
-                        return el.innerText || el.textContent || '';
-                    })()`;
+                    jsLogic = `const el = document.querySelector('${selector.replace(/'/g, "\\'")}'); if (!el) return 'Element not found'; return el.innerText || el.textContent || ''`;
                 } else {
-                    jsCode = `document.body.innerText || document.body.textContent || ''`;
+                    jsLogic = `return document.body.innerText || document.body.textContent || ''`;
                 }
-
-                const script = `tell application "Safari"
-    tell front document
-        do JavaScript "${escapeAppleScript(jsCode)}"
-    end tell
-end tell`;
-
+                
+                // Wrap in IIFE
+                const jsCode = `(function() { ${jsLogic} })()`;
+                
+                // Build AppleScript - properly escape for shell execution
+                const script = `tell application "Safari" to tell front document to do JavaScript "${jsCode.replace(/"/g, '\\"').replace(/\\/g, '\\\\')}"`;
+                
                 const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
                 let content = stdout.trim();
                 
@@ -152,21 +149,19 @@ end tell`;
                 return 'Error: Safari automation is only available on macOS';
             }
 
-            const jsCode = escapeAppleScript(args.script as string);
-
-            const script = `tell application "Safari"
-    tell front document
-        do JavaScript "${jsCode}"
-    end tell
-end tell`;
+            const userScript = args.script as string;
+            // Escape quotes and backslashes for AppleScript
+            const escapedScript = userScript.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            
+            const script = `tell application "Safari" to tell front document to do JavaScript "${escapedScript}"`;
 
             try {
                 const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
                 const result = stdout.trim();
-                logger.info({ script: args.script, result }, 'JavaScript executed in Safari');
+                logger.info({ script: userScript, result }, 'JavaScript executed in Safari');
                 return result || 'JavaScript executed successfully (no return value)';
             } catch (error) {
-                logger.error({ error, script: args.script }, 'Failed to execute JavaScript in Safari');
+                logger.error({ error, script: userScript }, 'Failed to execute JavaScript in Safari');
                 return `Error: ${(error as Error).message}`;
             }
         },
