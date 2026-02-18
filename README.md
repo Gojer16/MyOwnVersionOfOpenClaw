@@ -80,7 +80,8 @@ Talk to Talon wherever you are:
 
 ### AI Agent Capabilities
 
-- **Smart Model Routing** — Uses cheapest capable model (DeepSeek → OpenRouter → OpenAI)
+- **100% FREE Models** — OpenCode integration with 4 free models (no API key needed!)
+- **Smart Model Routing** — Uses cheapest capable model (OpenCode → DeepSeek → OpenRouter → OpenAI)
 - **Automatic Fallback** — If one provider fails, seamlessly switches to another
 - **Context Window Protection** — Prevents crashes from token overflow
 - **Subagent Delegation** — Delegates specialized tasks to cheap models (97% cost savings)
