@@ -11,6 +11,26 @@ import { logger } from '../utils/logger.js';
 export const TALON_HOME = path.join(os.homedir(), '.talon');
 const CONFIG_PATH = path.join(TALON_HOME, 'config.json');
 
+// ─── Frontmatter Stripping ────────────────────────────────────────
+
+/**
+ * Strip YAML frontmatter from template content.
+ * Matches OpenClaw's approach: removes --- delimited blocks at the start.
+ */
+function stripFrontMatter(content: string): string {
+    if (!content.startsWith('---')) {
+        return content;
+    }
+    const endIndex = content.indexOf('\n---', 3);
+    if (endIndex === -1) {
+        return content;
+    }
+    const start = endIndex + '\n---'.length;
+    let trimmed = content.slice(start);
+    trimmed = trimmed.replace(/^\s+/, '');
+    return trimmed;
+}
+
 // ─── Env Var Resolution ───────────────────────────────────────────
 
 /**
@@ -107,7 +127,12 @@ export function ensureWorkspaceDefaults(sourceDir: string): void {
         const source = path.join(sourceDir, file);
 
         if (!fs.existsSync(target) && fs.existsSync(source)) {
-            fs.copyFileSync(source, target);
+            // Read template and strip frontmatter
+            const templateContent = fs.readFileSync(source, 'utf-8');
+            const cleanContent = stripFrontMatter(templateContent);
+            
+            // Write clean content to user workspace
+            fs.writeFileSync(target, cleanContent, 'utf-8');
             copiedCount++;
             logger.info(`Copied ${file} to workspace (${description})`);
         }
