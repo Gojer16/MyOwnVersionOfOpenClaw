@@ -39,6 +39,7 @@ export function App({ gatewayUrl, initialModel, workspaceRoot }: AppProps) {
     onMessage: handleGatewayMessage,
     onConnect: () => {},
     onDisconnect: () => setActivity('idle'),
+    autoConnect: true, // Auto-connect on mount
   });
 
   function handleGatewayMessage(msg: any) {
@@ -168,8 +169,9 @@ export function App({ gatewayUrl, initialModel, workspaceRoot }: AppProps) {
     onCtrlC: () => {
       if (overlay !== 'none') {
         setOverlay('none');
-      } else if (activity !== 'idle') {
-        setActivity('idle');
+      } else {
+        // Exit on Ctrl+C
+        process.exit(0);
       }
     },
     onCtrlD: () => process.exit(0),
@@ -180,9 +182,10 @@ export function App({ gatewayUrl, initialModel, workspaceRoot }: AppProps) {
     onEscape: () => setOverlay('none'),
   });
 
-  useEffect(() => {
-    connect();
-  }, [connect]);
+  // Remove the manual connect call - autoConnect handles it
+  // useEffect(() => {
+  //   connect();
+  // }, [connect]);
 
   if (overlay === 'model') {
     return (
@@ -233,7 +236,7 @@ export function App({ gatewayUrl, initialModel, workspaceRoot }: AppProps) {
 
       <Box marginTop={1}>
         <Text dimColor>
-          Ctrl+O: Model | Ctrl+P: Session | Ctrl+T: Tools | Ctrl+L: Clear | Ctrl+D: Exit
+          Ctrl+O: Model | Ctrl+P: Session | Ctrl+T: Tools | Ctrl+L: Clear | Ctrl+C: Exit
         </Text>
       </Box>
     </Box>

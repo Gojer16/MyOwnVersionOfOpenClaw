@@ -32,6 +32,7 @@ export function InputBar({
         onSubmit={handleSubmit}
         placeholder={placeholder}
         showCursor={!disabled}
+        focus={!disabled}
       />
     </Box>
   );
