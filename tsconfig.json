@@ -13,8 +13,14 @@
         "declaration": true,
         "declarationMap": true,
         "sourceMap": true,
+        "jsx": "react",
+        "jsxFactory": "React.createElement",
+        "jsxFragmentFactory": "React.Fragment",
         "paths": {
             "@talon/*": [
+                "./src/*"
+            ],
+            "@/*": [
                 "./src/*"
             ]
         },
