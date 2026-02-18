@@ -234,15 +234,19 @@ async function stepModelAuth(): Promise<WizardResult['agent']> {
         finalModel = modelId;
     }
 
-    // Model check
-    console.log(chalk.dim('\n  Testing model connectivity...'));
-    const check = await checkModel(provider.baseUrl, apiKey, finalModel, provider.apiType);
-
-    if (check.ok) {
-        console.log(chalk.green('  ✓ Model check passed!\n'));
+    // Model check (skip for OpenCode - it doesn't need auth)
+    if (providerId === 'opencode') {
+        console.log(chalk.green('\n  ✓ OpenCode models ready (no auth required)\n'));
     } else {
-        console.log(chalk.red(`  ✗ Model check failed: ${check.error}`));
-        console.log(chalk.yellow('  Continuing anyway — you can fix this later.\n'));
+        console.log(chalk.dim('\n  Testing model connectivity...'));
+        const check = await checkModel(provider.baseUrl, apiKey, finalModel, provider.apiType);
+
+        if (check.ok) {
+            console.log(chalk.green('  ✓ Model check passed!\n'));
+        } else {
+            console.log(chalk.red(`  ✗ Model check failed: ${check.error}`));
+            console.log(chalk.yellow('  Continuing anyway — you can fix this later.\n'));
+        }
     }
 
     const fullModelId = providerId === 'deepseek' ? finalModel : `${providerId}/${finalModel}`;
