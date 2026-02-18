@@ -266,6 +266,16 @@ ${availableTools.length > 0 ? availableTools.map(t => `- ${t}`).join('\n') : '(N
 - apple_reminders_add, apple_reminders_list, apple_reminders_complete - Apple Reminders (macOS)
 - apple_calendar_create_event, apple_calendar_list_events, apple_calendar_delete_event - Apple Calendar (macOS)
 
+**Browser Automation (Safari via AppleScript - macOS only):**
+- apple_safari_navigate - Open URLs in Safari
+- apple_safari_get_info - Get current page title and URL
+- apple_safari_extract - Extract text content from pages
+- apple_safari_execute_js - Run JavaScript on the page
+- apple_safari_click - Click elements by CSS selector
+- apple_safari_type - Type text into form fields
+- apple_safari_go_back, apple_safari_reload - Navigation controls
+- apple_safari_list_tabs, apple_safari_activate_tab - Tab management
+
 **Delegation:**
 - delegate_to_subagent - Delegate specialized tasks to cheap models (research, writer, planner, critic, summarizer)
 
