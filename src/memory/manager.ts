@@ -48,12 +48,10 @@ function truncateToTokens(text: string, maxTokens: number): string {
 
 export class MemoryManager {
     private config: MemoryManagerConfig;
-    private soul: string;
     private availableTools: string[] = [];
 
     constructor(config?: Partial<MemoryManagerConfig>) {
         this.config = { ...DEFAULT_CONFIG, ...config };
-        this.soul = loadSoul(this.config.workspaceRoot);
     }
 
     /**
@@ -67,7 +65,7 @@ export class MemoryManager {
      * Build the complete LLM message array for a session.
      *
      * This is the core function — it assembles exactly what the LLM sees:
-     * 1. System prompt (~500 tokens)
+     * 1. System prompt (~500 tokens) - LOADED FRESH EVERY TIME
      * 2. Memory summary (≤800 tokens)
      * 3. Last N messages (~2000 tokens)
      * 4. Tool results truncated (~500 tokens each)
@@ -77,12 +75,21 @@ export class MemoryManager {
     buildContext(session: Session): LLMMessage[] {
         const messages: LLMMessage[] = [];
 
-        // 1. System prompt with SOUL.md
+        // 1. System prompt - Load ALL workspace files fresh (SOUL.md, USER.md, IDENTITY.md, MEMORY.md)
+        // This ensures the agent always knows who you are, even on new sessions
+        const soul = loadSoul(this.config.workspaceRoot);
         const systemPrompt = buildSystemPrompt(
-            this.soul,
+            soul,
             this.availableTools,
             this.config.workspaceRoot
         );
+        
+        logger.debug({
+            workspaceRoot: this.config.workspaceRoot,
+            systemPromptLength: systemPrompt.length,
+            estimatedTokens: estimateTokens(systemPrompt),
+        }, 'System prompt built with fresh workspace files');
+        
         messages.push({
             role: 'system',
             content: systemPrompt,
@@ -270,10 +277,11 @@ export class MemoryManager {
 
     /**
      * Reload SOUL.md (called when personality is updated).
+     * Note: This is now a no-op since we load fresh on every buildContext.
+     * Kept for backward compatibility.
      */
     reloadSoul(): void {
-        this.soul = loadSoul(this.config.workspaceRoot);
-        logger.info('Reloaded SOUL.md');
+        logger.info('reloadSoul() called - workspace files are now loaded fresh on every message');
     }
 
     /**

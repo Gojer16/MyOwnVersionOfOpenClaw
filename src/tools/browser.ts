@@ -37,6 +37,8 @@ export class BrowserTools {
             this.browser = await puppeteer.launch({
                 headless: this.headless,
                 args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                // Let Puppeteer use its bundled Chrome
+                executablePath: undefined,
             });
 
             this.page = await this.browser.newPage();
@@ -44,10 +46,10 @@ export class BrowserTools {
             // Set viewport
             await this.page.setViewport(this.viewport);
 
-            logger.info('Browser launched');
+            logger.info('Browser launched successfully');
         } catch (error: any) {
-            logger.error({ error }, 'Failed to launch browser');
-            throw error;
+            logger.error({ error: error.message }, 'Failed to launch browser');
+            throw new Error(`Browser launch failed: ${error.message}. Try running: npx puppeteer browsers install chrome`);
         }
     }
 
