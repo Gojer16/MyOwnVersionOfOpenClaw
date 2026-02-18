@@ -182,6 +182,26 @@ export function getTerminalWidth(): number {
     return process.stdout.columns || 80;
 }
 
+// ─── AI Response Formatting ───────────────────────────────────────
+
+/**
+ * Format AI response text for terminal display
+ * - Removes ** markdown bold syntax (looks ugly in terminal)
+ * - Adds color to bullet points for better readability
+ * - Preserves other formatting
+ */
+export function formatAIResponse(text: string): string {
+    if (!text) return text;
+
+    return text
+        // Remove ** markdown bold (but keep the content)
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        // Add color to bullet points (lines starting with -)
+        .replace(/^(\s*)-\s+/gm, (match, indent) => {
+            return `${indent}${chalk.cyan('•')} `;
+        });
+}
+
 /**
  * Truncate text to fit width with ellipsis
  */
