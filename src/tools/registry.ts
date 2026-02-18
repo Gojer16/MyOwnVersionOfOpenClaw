@@ -14,6 +14,7 @@ import { tasksTools } from './tasks.js';
 import { appleNotesTools } from './apple-notes.js';
 import { appleRemindersTools } from './apple-reminders.js';
 import { appleCalendarTools } from './apple-calendar.js';
+import { appleSafariTools } from './apple-safari.js';
 import { logger } from '../utils/logger.js';
 
 export interface ToolDefinition {
@@ -78,7 +79,7 @@ export function registerAllTools(agentLoop: AgentLoop, config: TalonConfig): voi
 
     // Apple integrations (macOS only)
     if (process.platform === 'darwin') {
-        for (const tool of [...appleNotesTools, ...appleRemindersTools, ...appleCalendarTools]) {
+        for (const tool of [...appleNotesTools, ...appleRemindersTools, ...appleCalendarTools, ...appleSafariTools]) {
             agentLoop.registerTool(tool);
             registered.push(tool.name);
         }
