@@ -144,13 +144,24 @@ Examples:
                 }
             }
             
-            // Try to kill any running gateway process
+            // Try to kill any running gateway process by port
             try {
                 const { execSync } = await import('child_process');
-                execSync('pkill -f "node.*gateway" || pkill -f "talon.*start"', { stdio: 'ignore' });
-                if (!stopped) {
-                    console.log('✓ Stopped running gateway');
-                    stopped = true;
+                // Find process listening on port 19789
+                const lsofOutput = execSync('lsof -ti :19789 2>/dev/null || true', { encoding: 'utf-8' }).trim();
+                if (lsofOutput) {
+                    const pids = lsofOutput.split('\n').filter(Boolean);
+                    for (const pid of pids) {
+                        try {
+                            process.kill(parseInt(pid, 10), 'SIGTERM');
+                            if (!stopped) {
+                                console.log('✓ Stopped running gateway');
+                                stopped = true;
+                            }
+                        } catch {
+                            // Ignore
+                        }
+                    }
                 }
             } catch {
                 // Ignore - no process found
