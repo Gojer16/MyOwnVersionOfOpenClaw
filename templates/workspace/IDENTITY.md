@@ -1,3 +1,9 @@
+---
+summary: "Agent identity record"
+read_when:
+  - Bootstrapping a workspace manually
+---
+
 # IDENTITY
 
 Fill this in during your first conversation. Make it yours.

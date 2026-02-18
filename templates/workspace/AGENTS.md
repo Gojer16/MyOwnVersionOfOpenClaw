@@ -1,5 +1,9 @@
-<!-- ⚠️  TEMPLATE FILE - Generic operating manual -->
-<!-- Copy to ~/.talon/workspace/AGENTS.md (customize if needed) -->
+---
+summary: "Agent operating manual and behavioral guidelines"
+read_when:
+  - Every agent run
+  - Bootstrapping a workspace manually
+---
 
 # AGENTS
 

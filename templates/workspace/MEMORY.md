@@ -1,3 +1,9 @@
+---
+summary: "Long-term memory storage"
+read_when:
+  - Main session only (not group chats)
+---
+
 # MEMORY
 
 Your long-term memory. Curated, not raw.

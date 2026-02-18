@@ -1,11 +1,8 @@
-<!-- ⚠️  TEMPLATE FILE - This is a generic starter template! -->
-<!-- 
-  PERSONALIZATION INSTRUCTIONS:
-  1. This file will be copied to ~/.talon/workspace/USER.md on first run
-  2. Edit that copy (not this template) with your personal information
-  3. The AI will learn about you and update this file over time
-  4. NEVER commit the ~/.talon/workspace/ version to git!
--->
+---
+summary: "User profile record"
+read_when:
+  - Bootstrapping a workspace manually
+---
 
 # USER
 

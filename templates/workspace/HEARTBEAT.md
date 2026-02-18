@@ -1,3 +1,9 @@
+---
+summary: "Heartbeat monitoring checklist"
+read_when:
+  - Heartbeat polls
+---
+
 # HEARTBEAT
 
 Check these on each heartbeat poll. Update this file as needed.

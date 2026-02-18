@@ -1,3 +1,10 @@
+---
+summary: "Tool documentation and configuration"
+read_when:
+  - When using tools
+  - Bootstrapping a workspace manually
+---
+
 # TOOLS
 
 This file documents your available tools and how to use them effectively.

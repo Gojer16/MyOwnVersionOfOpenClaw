@@ -1,11 +1,9 @@
-<!-- ⚠️  TEMPLATE FILE - This is a generic starter template! -->
-<!-- 
-  PERSONALIZATION INSTRUCTIONS:
-  1. This file will be copied to ~/.talon/workspace/SOUL.md on first run
-  2. Edit that copy (not this template) to define YOUR AI's personality
-  3. This file evolves as your AI learns who you are
-  4. NEVER commit the ~/.talon/workspace/ version to git!
--->
+---
+summary: "Agent personality and behavioral guidelines"
+read_when:
+  - Every agent run
+  - Bootstrapping a workspace manually
+---
 
 # THE SOUL
 

@@ -1,3 +1,9 @@
+---
+summary: "Startup instructions executed on boot"
+read_when:
+  - Gateway startup (if boot-md hook enabled)
+---
+
 # 🚀 BOOT.md — Startup Instructions
 
 This file runs automatically when Talon starts (if boot-md hook is enabled).
