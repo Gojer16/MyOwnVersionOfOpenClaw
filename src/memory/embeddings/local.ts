@@ -11,44 +11,101 @@ const DEFAULT_MODEL = 'embeddinggemma-300m-qat-Q8_0.gguf';
 const EMBEDDING_DIMENSIONS = 256;
 
 /**
- * Local embedding provider using llama.cpp.
- * Note: This is a placeholder implementation.
- * Full implementation requires node-llama-cpp package.
+ * Local embedding provider using llama.cpp via node-llama-cpp.
  */
 export class LocalEmbeddingProvider implements EmbeddingProvider {
   readonly id = 'local' as const;
   readonly model: string;
   readonly maxInputTokens = 512;
 
-  private modelPath?: string;
+  private llama: any;
+  private modelInstance: any;
+  private context: any;
 
-  private constructor(options: LocalEmbeddingOptions) {
-    this.modelPath = options.modelPath;
+  private constructor(
+    options: LocalEmbeddingOptions,
+    llama: any,
+    modelInstance: any,
+    context: any,
+  ) {
+    this.llama = llama;
+    this.modelInstance = modelInstance;
+    this.context = context;
     this.model = DEFAULT_MODEL;
   }
 
   static async create(options: LocalEmbeddingOptions): Promise<LocalEmbeddingProvider> {
-    // Check if node-llama-cpp is available
     try {
-      // Try to import node-llama-cpp
-      await import('node-llama-cpp');
-      logger.info('Local embeddings available via node-llama-cpp');
+      // Dynamic import of node-llama-cpp
+      const { getLlama } = await import('node-llama-cpp');
+
+      const llama = await getLlama();
+
+      // Load model (auto-downloads if not present)
+      const modelPath = options.modelPath || DEFAULT_MODEL;
+      logger.info({ modelPath }, 'Loading local embedding model');
+
+      const model = await llama.loadModel({
+        modelPath,
+        // Auto-download from HuggingFace if not found
+        onDownloadProgress: (progress: number) => {
+          if (progress % 10 === 0) {
+            logger.info({ progress }, 'Downloading embedding model');
+          }
+        },
+      });
+
+      // Create context for embeddings
+      const context = await model.createEmbeddingContext();
+
+      logger.info('Local embedding model loaded successfully');
+
+      return new LocalEmbeddingProvider(options, llama, model, context);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error({ error: message }, 'Failed to load local embeddings');
       throw new Error(
-        'Local embeddings require node-llama-cpp package. Install with: npm install --save-optional node-llama-cpp',
+        `Local embeddings require node-llama-cpp package. Install with: npm install --save-optional node-llama-cpp\nError: ${message}`,
       );
     }
-
-    return new LocalEmbeddingProvider(options);
   }
 
   async embedQuery(text: string): Promise<number[]> {
-    // Placeholder: In real implementation, this would use node-llama-cpp
-    throw new Error('Local embeddings not yet implemented. Use OpenRouter or Gemini instead.');
+    try {
+      const embedding = await this.context.getEmbeddingFor(text.slice(0, this.maxInputTokens * 4));
+
+      if (!embedding || embedding.length !== EMBEDDING_DIMENSIONS) {
+        throw new Error(`Invalid embedding dimensions: ${embedding?.length}`);
+      }
+
+      return normalizeEmbedding(Array.from(embedding));
+    } catch (error) {
+      logger.error({ error }, 'Local embedding generation failed');
+      throw error;
+    }
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
-    // Placeholder: In real implementation, this would use node-llama-cpp
-    throw new Error('Local embeddings not yet implemented. Use OpenRouter or Gemini instead.');
+    // Sequential processing for local embeddings
+    const embeddings: number[][] = [];
+
+    for (const text of texts) {
+      const embedding = await this.embedQuery(text);
+      embeddings.push(embedding);
+    }
+
+    return embeddings;
+  }
+
+  /**
+   * Clean up resources.
+   */
+  async dispose(): Promise<void> {
+    if (this.context) {
+      await this.context.dispose();
+    }
+    if (this.modelInstance) {
+      await this.modelInstance.dispose();
+    }
   }
 }

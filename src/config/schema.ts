@@ -246,6 +246,50 @@ const HooksSchema = z.object({
     }).default({}),
 });
 
+// ─── Vector Memory ────────────────────────────────────────────────
+
+const VectorMemorySchema = z.object({
+    enabled: z.boolean().default(false),
+    provider: z.enum(['openai', 'simple']).default('simple'),
+    retentionDays: z.number().int().min(1).default(90),
+});
+
+// ─── Memory V2 (New Hybrid Search System) ─────────────────────────
+
+const MemoryV2EmbeddingsSchema = z.object({
+    provider: z.enum(['openrouter', 'gemini', 'local', 'auto']).default('auto'),
+    model: z.string().optional(),
+    fallback: z.enum(['openrouter', 'gemini', 'local', 'none']).default('gemini'),
+    cacheSize: z.number().int().min(100).default(1000),
+});
+
+const MemoryV2ChunkingSchema = z.object({
+    tokens: z.number().int().min(100).max(2000).default(400),
+    overlap: z.number().int().min(0).max(200).default(80),
+});
+
+const MemoryV2SearchSchema = z.object({
+    vectorWeight: z.number().min(0).max(1).default(0.7),
+    keywordWeight: z.number().min(0).max(1).default(0.3),
+    defaultLimit: z.number().int().min(1).max(100).default(10),
+});
+
+const MemoryV2WatcherSchema = z.object({
+    enabled: z.boolean().default(true),
+    debounceMs: z.number().int().min(100).default(1500),
+    paths: z.array(z.string()).default(['memory/**/*.md']),
+    ignore: z.array(z.string()).default(['**/node_modules/**', '**/.git/**']),
+});
+
+const MemoryV2Schema = z.object({
+    enabled: z.boolean().default(true),
+    embeddings: MemoryV2EmbeddingsSchema.default({}),
+    chunking: MemoryV2ChunkingSchema.default({}),
+    search: MemoryV2SearchSchema.default({}),
+    watcher: MemoryV2WatcherSchema.default({}),
+    indexSessions: z.boolean().default(true),
+});
+
 // ─── Root Config ──────────────────────────────────────────────────
 
 export const TalonConfigSchema = z.object({
@@ -254,11 +298,13 @@ export const TalonConfigSchema = z.object({
     channels: ChannelsSchema.default({}),
     tools: ToolsSchema.default({}),
     memory: MemorySchema.default({}),
+    memoryV2: MemoryV2Schema.default({}),
     shadow: ShadowSchema.default({}),
     security: SecuritySchema.default({}),
     ui: UISchema.default({}),
     workspace: WorkspaceSchema.default({}),
     hooks: HooksSchema.default({}),
+    vectorMemory: VectorMemorySchema.default({}),
 });
 
 export type TalonConfig = z.infer<typeof TalonConfigSchema>;
