@@ -9,6 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+#### Enhanced TUI (Ink Edition) - NEW!
+- **Component-Based UI**: Rebuilt TUI using Ink (React for CLIs)
+- **Rich Tool Visualization**: Expandable tool cards with syntax highlighting
+- **Model Picker**: Fuzzy-searchable model selection overlay (Ctrl+O)
+- **Session Picker**: Session management with history preview (Ctrl+P)
+- **Markdown Rendering**: Full markdown support with syntax-highlighted code blocks
+- **Keyboard Shortcuts**: 10+ shortcuts for quick actions
+- **Performance**: Optimized rendering with React.memo and virtual scrolling
+- **Status Bar**: Real-time connection and activity indicators
+- **Smooth Streaming**: Real-time message updates with spinner indicators
+- **Token Display**: Shows input/output/total tokens after each response
+
+#### TUI Components
+- **UserMessage**: User message bubbles with timestamps
+- **AssistantMessage**: Assistant messages with streaming indicators
+- **ToolCard**: Expandable tool execution cards with status (pending/success/error)
+- **ChatLog**: Main chat display with message history
+- **StatusBar**: Connection status, model info, workspace path
+- **InputBar**: Text input with submit handling
+- **Markdown**: Full markdown rendering with code blocks
+- **ModelPicker**: Fuzzy search overlay for model selection
+- **SessionPicker**: Session management overlay
+
+#### TUI Hooks
+- **useGateway**: WebSocket connection management
+- **useSession**: Session state management
+- **useKeyboard**: Keyboard shortcut handling
+
+#### TUI Utilities
+- **Fuzzy Search**: Fuse.js-based fuzzy matching
+- **Syntax Highlighting**: cli-highlight integration for code blocks
+- **Theme System**: Comprehensive color palette and styles
+
+### ⌨️ Keyboard Shortcuts
+- `Ctrl+O` - Model picker
+- `Ctrl+P` - Session picker
+- `Ctrl+T` - Toggle tools
+- `Ctrl+L` - Clear screen
+- `Ctrl+D` - Exit
+- `Escape` - Close overlay
+
+### 📦 Dependencies
+- Added: ink@^4.4.1, react@^18.2.0, ink-text-input, ink-select-input, ink-spinner
+- Added: cli-highlight@^2.1.11, fuse.js@^7.0.0, marked@^12.0.0
+- Added: @testing-library/react, ink-testing-library
+
+### 🔧 Technical
+- Component-based architecture with React/Ink
+- React hooks for state management
+- Fuzzy search with Fuse.js
+- Performance optimizations (React.memo, virtual scrolling)
+- TDD approach with comprehensive tests
+
 #### Apple Mail Integration (macOS)
 - **apple_mail_list_emails**: List emails from mailbox (inbox, sent, junk, etc.) with sender, subject, date, read status
 - **apple_mail_read_email**: Read full email content by message ID
