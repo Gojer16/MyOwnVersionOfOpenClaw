@@ -10,6 +10,8 @@
     "scripts": {
         "dev": "tsx watch src/gateway/index.ts",
         "build": "tsc && chmod +x dist/cli/index.js",
+        "build:web": "cd web && npm run build",
+        "build:all": "npm run build && npm run build:web",
         "prestart": "npm run build",
         "start": "NODE_ENV=production node dist/cli/index.js start",
         "gateway": "NODE_ENV=production node dist/cli/index.js gateway",
@@ -17,6 +19,7 @@
         "setup:secure": "node scripts/setup-secure.js",
         "health": "tsx src/cli/index.ts health",
         "ws": "node scripts/ws-client.js",
+        "web:dev": "cd web && npm run dev",
         "test": "vitest run",
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
@@ -32,6 +35,7 @@
     },
     "dependencies": {
         "@fastify/cors": "^11.0.0",
+        "@fastify/static": "^9.0.0",
         "@fastify/websocket": "^11.0.1",
         "@inquirer/prompts": "^8.2.1",
         "@types/chokidar": "^1.7.5",

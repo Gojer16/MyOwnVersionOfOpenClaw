@@ -3,8 +3,11 @@
 
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import { WebSocketServer, WebSocket } from 'ws';
 import { nanoid } from 'nanoid';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { TalonConfig } from '../config/schema.js';
 import type { EventBus } from './events.js';
 import type { SessionManager } from './sessions.js';
@@ -12,6 +15,8 @@ import type { MessageRouter } from './router.js';
 import type { AgentLoop } from '../agent/loop.js';
 import type { WSMessage, WSClient, InboundMessage } from '../utils/types.js';
 import { logger } from '../utils/logger.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class TalonServer {
     private fastify = Fastify({ logger: false });
@@ -32,8 +37,8 @@ export class TalonServer {
         // Auth middleware
         if (this.config.gateway.auth.mode === 'token') {
             this.fastify.addHook('onRequest', async (request, reply) => {
-                // Skip auth for health checks
-                if (request.url.startsWith('/api/health')) {
+                // Skip auth for health checks and static files
+                if (request.url.startsWith('/api/health') || !request.url.startsWith('/api')) {
                     return;
                 }
 
@@ -57,6 +62,18 @@ export class TalonServer {
         await this.fastify.register(cors, {
             origin: this.config.gateway.cors.origins,
         });
+
+        // Serve static files (web UI)
+        const webDir = path.join(__dirname, '../../web');
+        try {
+            await this.fastify.register(fastifyStatic, {
+                root: webDir,
+                prefix: '/'
+            });
+            logger.info({ webDir }, 'Serving web UI');
+        } catch (err) {
+            logger.warn({ err }, 'Web UI not available (run: cd web && npm run build)');
+        }
 
         // HTTP routes
         this.registerRoutes();
