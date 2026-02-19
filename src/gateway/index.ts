@@ -18,6 +18,7 @@ import { registerAllTools } from '../tools/registry.js';
 import { CliChannel } from '../channels/cli/index.js';
 import { TelegramChannel } from '../channels/telegram/index.js';
 import { WhatsAppChannel } from '../channels/whatsapp/index.js';
+import { registerGateway, unregisterGateway } from './process-manager.js';
 import { logger } from '../utils/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,7 +30,7 @@ function printBanner(): void {
     console.log(`
   ╔══════════════════════════════════════╗
   ║                                      ║
-  ║   🦅  T A L O N   v0.2.1            ║
+  ║   🦅  T A L O N   v0.3.3            ║
   ║                                      ║
   ║   Personal AI Assistant              ║
   ║   Inspired by OpenClaw               ║
@@ -81,6 +82,9 @@ async function boot(): Promise<void> {
 
     // 4. Create server (with agent loop reference)
     const server = new TalonServer(config, eventBus, sessionManager, router, agentLoop);
+
+    // Register gateway process
+    registerGateway('0.3.3');
 
     // 5. Wire: inbound messages → agent loop
     eventBus.on('message.inbound', async ({ message, sessionId }) => {
@@ -265,6 +269,9 @@ async function boot(): Promise<void> {
     // 8. Graceful shutdown
     const shutdown = async (signal: string) => {
         logger.info(`Received ${signal}, shutting down...`);
+
+        // Unregister gateway
+        unregisterGateway();
 
         // Stop channels first
         for (const channel of channels) {
