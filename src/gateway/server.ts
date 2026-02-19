@@ -88,7 +88,7 @@ export class TalonServer {
             
             return {
                 status: 'ok',
-                version: '0.2.1',
+                version: '0.3.3',
                 uptime: process.uptime(),
                 timestamp: new Date().toISOString(),
                 components: {
