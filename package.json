@@ -1,6 +1,6 @@
 {
     "name": "talon",
-    "version": "0.3.0",
+    "version": "0.3.3",
     "description": "Personal AI assistant — local-first, multi-channel, with agent loop and memory compression",
     "type": "module",
     "main": "dist/gateway/index.js",
@@ -9,19 +9,22 @@
     },
     "scripts": {
         "dev": "tsx watch src/gateway/index.ts",
-        "build": "tsc",
+        "build": "tsc && chmod +x dist/cli/index.js",
         "prestart": "npm run build",
         "start": "NODE_ENV=production node dist/cli/index.js start",
+        "gateway": "NODE_ENV=production node dist/cli/index.js gateway",
         "setup": "tsx src/cli/index.ts setup",
         "setup:secure": "node scripts/setup-secure.js",
         "health": "tsx src/cli/index.ts health",
+        "ws": "node scripts/ws-client.js",
         "test": "vitest run",
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
         "test:memory": "node scripts/test-memory-hallucination.js",
         "test:integration": "node scripts/test-hallucination-integration.js",
         "test:vector": "node scripts/test-vector-memory.js",
-        "test:all": "npm run build && npm run test:memory && npm run test:integration",
+        "test:gateway": "node scripts/test-gateway-e2e.js",
+        "test:all": "npm run build && npm run test:memory && npm run test:integration && npm run test:gateway",
         "install:vector": "bash scripts/install-vector-deps.sh"
     },
     "engines": {
