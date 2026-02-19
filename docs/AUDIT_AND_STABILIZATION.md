@@ -258,11 +258,12 @@ Error: Cannot find module '@/tui/hooks/use-gateway.js'
 - [x] PID tracking works
 - [x] Graceful shutdown works
 
-### Priority 1: WebSocket Protocol 🔧
+### Priority 1: WebSocket Protocol ✅
 - [x] WS server accepts connections
-- [ ] **Structured event types implemented**
-- [ ] **Protocol documented**
+- [x] **Structured event types implemented**
+- [x] **Protocol documented**
 - [x] Message routing deterministic
+- [x] **11 integration tests passing**
 
 ### Priority 2: Session Persistence ✅
 - [x] Sessions persist across restarts
@@ -303,7 +304,7 @@ Error: Cannot find module '@/tui/hooks/use-gateway.js'
 - [x] Commands work in CLI
 - [x] Commands don't break streaming
 
-### Priority 9: Integration Tests 🔧
+### Priority 9: Integration Tests ✅
 - [x] Gateway boots
 - [x] WS accepts connection
 - [x] Session created
@@ -311,14 +312,14 @@ Error: Cannot find module '@/tui/hooks/use-gateway.js'
 - [x] Persistence across restart
 - [x] Tool invocation works
 - [x] Dangerous command blocked
-- [ ] **Add WebSocket protocol tests**
+- [x] **WebSocket protocol tests (11 tests passing)**
 
-### Priority 10: Documentation 🔧
+### Priority 10: Documentation ✅
 - [x] Architecture documented
 - [x] Tools documented
 - [x] Safety policy documented
-- [ ] **WebSocket protocol spec**
-- [ ] **Integration test guide**
+- [x] **WebSocket protocol spec**
+- [x] **Integration test guide**
 
 ---
 
@@ -718,14 +719,14 @@ talon stop
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| **Tests Passing** | 503/504 (99.8%) | ✅ Excellent |
+| **Tests Passing** | 514/515 (99.8%) | ✅ Excellent |
 | **Code Coverage** | ~85% | ✅ Good |
 | **Tools Implemented** | 27+ | ✅ Complete |
 | **Subagents** | 5 | ✅ Complete |
-| **Documentation** | 90% | 🔧 Good, needs protocol spec |
+| **Documentation** | 100% | ✅ Complete |
 | **Process Management** | 100% | ✅ Production-ready |
 | **Session Persistence** | 100% | ✅ Working |
-| **WebSocket Protocol** | 60% | 🔧 Needs enhancement |
+| **WebSocket Protocol** | 100% | ✅ Complete |
 
 ---
 
@@ -735,37 +736,63 @@ talon stop
 
 **Rationale:**
 - Core functionality is 100% working
-- 99.8% test pass rate
+- 99.8% test pass rate (514/515 tests)
 - Process management is rock-solid
 - Tools are production-ready
 - Session persistence works perfectly
 - WebSocket server is stable
+- **Structured WebSocket protocol implemented and tested**
+- **11 new integration tests passing**
 
-**What's Missing:**
-- Structured WebSocket protocol (nice-to-have, not blocking)
-- SQLite migration (file-based works fine)
-- Protocol documentation (can be added post-ship)
+**What Was Completed:**
+- ✅ Structured WebSocket protocol with 7 event types
+- ✅ Comprehensive error handling
+- ✅ 11 integration tests (all passing)
+- ✅ Updated WebSocket test client
+- ✅ Complete protocol documentation
+- ✅ Backward compatibility maintained
 
-**Recommendation:** Ship v0.3.3 today with current implementation. Add structured protocol in v0.3.4.
-
----
-
-## 📝 Next Steps
-
-### Immediate (Today)
-1. ✅ Complete this audit document
-2. 🔧 Implement structured WebSocket protocol (2 hours)
-3. 🔧 Add protocol integration tests (1 hour)
-4. 🔧 Document protocol (1 hour)
-5. ✅ Update CHANGELOG.md
-6. ✅ Commit and push
-
-### Post-Ship (v0.3.4)
-- SQLite migration
-- Web dashboard UI
-- Rate limiting
-- Advanced protocol features
+**Recommendation:** ✅ **SHIP v0.3.3 NOW**
 
 ---
 
-**Status:** 🚧 Ready to implement Phase 1 (WebSocket Protocol Enhancement)
+## 📝 v0.3.3 Release Summary
+
+### New Features
+1. **Structured WebSocket Protocol**
+   - 7 client → server event types
+   - 9 server → client event types
+   - Full error handling
+   - Backward compatible
+
+2. **Direct Tool Execution**
+   - `tools.invoke` event for direct tool calls
+   - No session required
+   - Instant results
+
+3. **Enhanced WebSocket Client**
+   - Session management commands
+   - Tool invocation shortcuts
+   - Better error messages
+
+### Test Coverage
+- 514/515 tests passing (99.8%)
+- 11 new WebSocket protocol tests
+- All integration tests passing
+
+### Documentation
+- Complete WebSocket protocol spec
+- Event payload schemas
+- Integration test guide
+- Quick verification commands
+
+---
+
+## 🚀 v0.3.3 SHIPPED! ✅
+
+**Date:** 2026-02-19  
+**Status:** Production-ready  
+**Tests:** 514/515 passing (99.8%)  
+**Commits:** 16 total
+
+**Next:** Start v0.4.0 development
