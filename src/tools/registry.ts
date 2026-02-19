@@ -9,6 +9,7 @@ import { registerShellTools } from './shell.js';
 import { registerMemoryTools } from './memory-tools.js';
 import { registerWebTools } from './web.js';
 import { registerBrowserTools } from './browser.js';
+import { desktopScreenshotTools } from './screenshot.js';
 import { notesTools } from './notes.js';
 import { tasksTools } from './tasks.js';
 import { appleNotesTools } from './apple-notes.js';
@@ -70,6 +71,12 @@ export function registerAllTools(agentLoop: AgentLoop, config: TalonConfig): voi
             agentLoop.registerTool(tool);
             registered.push(tool.name);
         }
+    }
+
+    // Desktop screenshot tool (always enabled)
+    for (const tool of desktopScreenshotTools) {
+        agentLoop.registerTool(tool);
+        registered.push(tool.name);
     }
 
     // Productivity tools (notes and tasks)
