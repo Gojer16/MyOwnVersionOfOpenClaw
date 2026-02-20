@@ -17,6 +17,7 @@ import { appleRemindersTools } from './apple-reminders.js';
 import { appleCalendarTools } from './apple-calendar.js';
 import { appleSafariTools } from './apple-safari.js';
 import { appleMailTools } from './apple-mail.js';
+import { createScratchpadTool } from './scratchpad.js';
 import { logger } from '../utils/logger.js';
 
 export interface ToolDefinition {
@@ -84,6 +85,11 @@ export function registerAllTools(agentLoop: AgentLoop, config: TalonConfig): voi
         agentLoop.registerTool(tool);
         registered.push(tool.name);
     }
+
+    // Scratchpad tool (always enabled for multi-step task tracking)
+    const scratchpadTool = createScratchpadTool();
+    agentLoop.registerTool(scratchpadTool);
+    registered.push(scratchpadTool.name);
 
     // Apple integrations (macOS only)
     logger.debug({ platform: process.platform, isDarwin: process.platform === 'darwin' }, 'Checking platform for Apple tools');

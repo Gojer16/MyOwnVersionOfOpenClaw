@@ -136,11 +136,12 @@ end tell`;
     },
     {
         name: 'apple_safari_execute_js',
-        description: 'Execute JavaScript on the current Safari page (macOS only). Use this for custom interactions.',
+        description: 'Execute JavaScript on the current Safari page (macOS only). Use this for custom interactions. Returns the result as a string (use JSON.stringify for objects).',
         parameters: {
             type: 'object',
             properties: {
-                script: { type: 'string', description: 'JavaScript code to execute' },
+                script: { type: 'string', description: 'JavaScript code to execute. For structured data, wrap in JSON.stringify().' },
+                waitMs: { type: 'number', description: 'Milliseconds to wait before executing (default: 0, useful for client-side rendered pages)' },
             },
             required: ['script'],
         },
@@ -150,6 +151,13 @@ end tell`;
             }
 
             const userScript = args.script as string;
+            const waitMs = (args.waitMs as number) || 0;
+            
+            // Wait if requested (for client-side rendering)
+            if (waitMs > 0) {
+                await new Promise(resolve => setTimeout(resolve, waitMs));
+            }
+            
             // Escape quotes and backslashes for AppleScript
             const escapedScript = userScript.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
             

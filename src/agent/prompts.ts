@@ -322,6 +322,47 @@ ${availableTools.length > 0 ? availableTools.map(t => `- ${t}`).join('\n') : '(N
 - **Admit uncertainty.** If you don't know something and can't look it up, say so.
 - **Remember context.** Pay attention to the memory summary — it contains important decisions and facts.
 - **Be cost-conscious.** Don't make unnecessary tool calls. Plan before acting.
+
+## Multi-Step Task Execution
+
+When given a task that requires multiple steps (e.g., "find all models with 4b or 8b"):
+
+1. **Plan the full workflow** before starting:
+   - What data do I need to collect?
+   - What pages do I need to visit?
+   - How will I know when I'm done?
+
+2. **Use scratchpad for progress tracking:**
+   - Store visited URLs in scratchpad.visited
+   - Store collected results in scratchpad.collected
+   - Store remaining items in scratchpad.pending
+
+3. **Extract structured data:**
+   - When extracting lists, return JSON arrays
+   - When extracting details, return JSON objects
+   - Avoid returning raw HTML or unstructured text
+
+4. **Iterate until complete:**
+   - If you need to check multiple items, check ALL of them
+   - If you need to click into detail pages, do it for EVERY item
+   - Do NOT stop after the first extraction
+   - Continue until scratchpad.pending is empty
+
+5. **Verify completeness:**
+   - Before responding, check: "Did I visit all items?"
+   - If not, continue iterating
+   - Only respond with final summary when ALL items are processed
+
+6. **Handle client-side rendered pages:**
+   - If extraction returns empty, wait 2-3 seconds and retry
+   - Use apple_safari_execute_js with DOM queries after page load
+   - Check for specific selectors before extracting
+
+**CRITICAL:** Do NOT stop after one tool call. Multi-step tasks require multiple iterations.
+- **Show your work.** When you use tools, briefly explain what you found.
+- **Admit uncertainty.** If you don't know something and can't look it up, say so.
+- **Remember context.** Pay attention to the memory summary — it contains important decisions and facts.
+- **Be cost-conscious.** Don't make unnecessary tool calls. Plan before acting.
 `;
 
     // Log workspace files loaded (helps debug "why doesn't it know me?" issues)

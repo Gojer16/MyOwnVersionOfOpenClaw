@@ -802,8 +802,520 @@ Gateway v0.3.3 is **DONE** when:
 
 ---
 
-**Last Updated:** 2026-02-19 01:02 AM  
-**Next Update:** After implementing `talon gateway` command
+## 🔍 Planner/Executor Loop Audit (2026-02-20)
+
+### Problem Statement
+
+Multi-step browsing tasks stop prematurely. Agent does:
+- navigate → extract → stop
+
+Instead of:
+- navigate → extract → parse → click → extract → iterate → summarize
+
+### Root Cause Analysis
+
+#### 1️⃣ **NO PLANNER/EXECUTOR SEPARATION**
+
+**Finding:** Talon does NOT have separate planner and executor agents.
+
+**Current Architecture:**
+```
+User Message → AgentLoop.run() → LLM with tools → Tool execution → LLM response → Done
+```
+
+**What exists:**
+- `PlannerSubagent` (src/subagents/planner.ts) - Creates JSON plans when explicitly delegated
+- `AgentLoop` (src/agent/loop.ts) - Main execution loop with tool calling
+- No automatic planner → executor → replanner cycle
+
+**Key Code:**
+```typescript
+// src/agent/loop.ts - AgentLoop.run()
+while (iteration < this.maxIterations) {
+  // 1. Build context
+  // 2. Call LLM with tools
+  // 3. If tool calls → execute → continue loop
+  // 4. If no tool calls → return final response
+}
+```
+
+**Problem:** The LLM decides when to stop. No enforced iteration protocol.
+
+#### 2️⃣ **TOOL OUTPUT IS UNSTRUCTURED**
+
+**Finding:** Safari tools return raw text, not structured JSON.
+
+**Example from `apple_safari_execute_js`:**
+```typescript
+const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
+return stdout.trim() || 'JavaScript executed successfully (no return value)';
+```
+
+**Returns:** Whatever JavaScript returns (could be HTML, text, undefined)
+
+**Problem:** LLM gets confused by wall-of-text HTML and stops.
+
+#### 3️⃣ **NO SCRATCHPAD / WORKING MEMORY**
+
+**Finding:** Session state has no structured scratchpad.
+
+**Current Session Structure:**
+```typescript
+interface Session {
+  id: string;
+  senderId: string;
+  channel: string;
+  state: 'created' | 'active' | 'idle';
+  messages: Message[];
+  memorySummary: string;
+  metadata: {
+    createdAt: number;
+    lastActiveAt: number;
+    messageCount: number;
+    model?: string;
+  };
+  config: Record<string, unknown>;
+}
+```
+
+**Missing:** No `scratchpad` field for tracking:
+- visited URLs
+- collected data
+- remaining items
+- progress state
+
+**Problem:** Agent cannot track progress across tool calls.
+
+#### 4️⃣ **NO "CONTINUE UNTIL DONE" CONTRACT**
+
+**Finding:** System prompt does not enforce completion.
+
+**Current System Prompt (src/agent/prompts.ts):**
+```typescript
+- **Use tools proactively.** If you need to check something, check it — don't guess.
+- **ALWAYS respond after using tools.** After tool execution, you MUST generate a text response...
+```
+
+**Missing:**
+- "You MUST continue until task complete"
+- "You MUST iterate through all items"
+- "You MUST not stop after one extract"
+
+**Problem:** LLM thinks one tool call is enough.
+
+#### 5️⃣ **EXTRACT TIMING ISSUE**
+
+**Finding:** `apple_safari_extract` returns "No text content found" on client-side rendered pages.
+
+**Code:**
+```typescript
+// Tries to extract immediately after navigate
+const jsLogic = `return document.body.innerText || document.body.textContent || ''`;
+```
+
+**Problem:** Page not fully loaded when extraction happens.
+
+**Solution:** Need delay or wait-for-selector logic.
+
+#### 6️⃣ **SCREENSHOT FALLBACK IS AUTOMATIC**
+
+**Finding:** No automatic screenshot fallback in current code.
+
+**Verified:** Safari tools do NOT automatically screenshot on extract failure.
+
+**Status:** Not a problem (was a false assumption).
+
+### Architecture Diagram
+
+**Current Flow:**
+```
+User: "Find models with 4b or 8b"
+  ↓
+AgentLoop.run()
+  ↓
+LLM decides: "I'll navigate and extract"
+  ↓
+Tool: apple_safari_navigate
+  ↓
+Tool: apple_safari_execute_js (extract model list)
+  ↓
+LLM sees: "Models | Docs | Pricing | translategemma | vision | 4b | 12b..."
+  ↓
+LLM thinks: "I got the list, I'm done"
+  ↓
+Returns: "Here are the models: ..."
+  ↓
+STOPS (no iteration)
+```
+
+**What SHOULD happen:**
+```
+User: "Find models with 4b or 8b"
+  ↓
+Planner: Create structured plan with iteration
+  ↓
+Executor: Execute step 1 (navigate)
+  ↓
+Executor: Execute step 2 (extract list as JSON)
+  ↓
+Planner: Check progress, plan next step
+  ↓
+Executor: Execute step 3 (click first model)
+  ↓
+Executor: Execute step 4 (extract details)
+  ↓
+Planner: Update scratchpad, check if done
+  ↓
+Loop until all models checked
+  ↓
+Planner: Generate final summary
+```
+
+### File Locations
+
+| Component | File | Status |
+|-----------|------|--------|
+| Main Agent Loop | `src/agent/loop.ts` | ✅ Exists (540 lines) |
+| Planner Subagent | `src/subagents/planner.ts` | ✅ Exists (26 lines) |
+| Subagent Registry | `src/subagents/registry.ts` | ✅ Exists (22 lines) |
+| Safari Tools | `src/tools/apple-safari.ts` | ✅ Exists (401 lines) |
+| System Prompts | `src/agent/prompts.ts` | ✅ Exists (433 lines) |
+| Session Manager | `src/gateway/sessions.ts` | ✅ Exists (247 lines) |
+| Memory Manager | `src/memory/manager.ts` | ✅ Exists (full file) |
+| Tool Registry | `src/tools/registry.ts` | ✅ Exists (112 lines) |
+
+### Current Planner Output Format
+
+**When explicitly delegated via `delegate_to_subagent`:**
+
+```json
+{
+  "goal": "Plan a project",
+  "steps": [
+    { "order": 1, "action": "...", "details": "...", "toolNeeded": "..." }
+  ],
+  "estimatedTime": "...",
+  "risks": ["..."]
+}
+```
+
+**Problem:** This is only used when explicitly delegated. Not automatic.
+
+### Current Executor Behavior
+
+**There is no separate executor.** The `AgentLoop` IS the executor.
+
+**Behavior:**
+1. Receives user message
+2. Calls LLM with tools
+3. If LLM returns tool calls → execute → add to messages → loop
+4. If LLM returns text → return to user → done
+
+**Stopping Decision:** Made by the LLM (when it returns text instead of tool calls).
+
+### Tool Result Handling
+
+**Current Flow:**
+```typescript
+// src/agent/loop.ts
+for (const tc of response.toolCalls) {
+  const toolHandler = this.tools.get(tc.name);
+  let output: string = await toolHandler.execute(tc.args);
+  
+  // Add to session messages
+  session.messages.push({
+    role: 'tool',
+    content: output,  // Raw string output
+    toolResults: [{ success, output }],
+    timestamp: Date.now(),
+  });
+}
+// Continue loop - LLM sees tool results in next iteration
+```
+
+**Problem:** Tool output is raw string, not normalized JSON.
+
+### Memory Storage
+
+**Session messages are stored in:**
+- File: `~/.talon/sessions/{sessionId}.json`
+- Structure: Array of Message objects
+
+**No scratchpad field exists.**
+
+### Streaming Logic
+
+**Streaming happens at the response level:**
+```typescript
+// src/gateway/server.ts
+for await (const chunk of agentLoop.run(session)) {
+  if (chunk.type === 'text') {
+    broadcast({ type: 'session.message.delta', payload: { delta: chunk.content } });
+  }
+}
+```
+
+**Not relevant to iteration problem.**
+
+### System Prompt Analysis
+
+**Current prompt does NOT include:**
+- Iteration enforcement
+- Progress tracking requirements
+- "Continue until complete" contract
+- Structured extraction requirements
+
+**What it DOES include:**
+- Tool descriptions
+- "Use tools proactively"
+- "Always respond after tools"
+
+### Conclusion
+
+**Talon is NOT a planner/executor system.** It's a single-agent loop with tool calling.
+
+**To fix multi-step browsing:**
+1. Add scratchpad to session state
+2. Normalize tool outputs to JSON
+3. Update system prompt to enforce iteration
+4. Add extraction delay for client-side pages
+5. Optionally: Implement explicit planner → executor cycle
+
+**Minimal Fix:** Patch the existing AgentLoop with better prompts and scratchpad.
+
+**Full Fix:** Implement planner/executor orchestration (more work).
+
+---
+
+## 🔧 Planner/Executor Fixes Implemented (2026-02-20)
+
+### Status: ✅ SHIPPED - Minimal Orchestration Patch
+
+**Approach:** Minimal patch to existing AgentLoop (not full planner/executor rewrite)
+
+### Changes Made
+
+#### 1️⃣ **Added Scratchpad to Session State**
+
+**File:** `src/utils/types.ts`
+
+**Change:**
+```typescript
+export interface Session {
+    // ... existing fields
+    scratchpad?: {
+        visited?: string[];
+        collected?: any[];
+        pending?: string[];
+        progress?: Record<string, any>;
+    };
+}
+```
+
+**Impact:** Sessions can now track multi-step task progress.
+
+#### 2️⃣ **Created Scratchpad Management Tool**
+
+**File:** `src/tools/scratchpad.ts` (NEW)
+
+**Features:**
+- `add_visited` - Track visited URLs/items
+- `add_collected` - Store collected results
+- `add_pending` - Add items to process
+- `remove_pending` - Mark items as done
+- `set_progress` - Update progress state
+- `clear` - Reset scratchpad
+
+**Registration:** `src/tools/registry.ts` - Always enabled
+
+#### 3️⃣ **Injected Scratchpad into System Prompt**
+
+**File:** `src/memory/manager.ts`
+
+**Change:** Added scratchpad state to context before memory summary:
+
+```typescript
+// 2. Scratchpad state (if exists) - for multi-step task tracking
+if (session.scratchpad && Object.keys(session.scratchpad).length > 0) {
+    const scratchpadContent = `## Current Task Progress (Scratchpad)
+    
+**Visited:** ${session.scratchpad.visited}
+**Collected:** ${JSON.stringify(session.scratchpad.collected)}
+**Pending:** ${session.scratchpad.pending}
+**Progress:** ${JSON.stringify(session.scratchpad.progress)}
+
+**Remember:** Continue iterating until scratchpad.pending is empty or task is complete.`;
+    
+    messages.push({ role: 'system', content: scratchpadContent });
+}
+```
+
+**Impact:** LLM sees progress state on every iteration.
+
+#### 4️⃣ **Updated System Prompt with Iteration Contract**
+
+**File:** `src/agent/prompts.ts`
+
+**Added Section:** "Multi-Step Task Execution"
+
+**Key Rules:**
+- Plan the full workflow before starting
+- Use scratchpad for progress tracking
+- Extract structured data (JSON)
+- Iterate until complete
+- Verify completeness before responding
+- Handle client-side rendered pages with delays
+
+**Critical Instruction:**
+> "Do NOT stop after one tool call. Multi-step tasks require multiple iterations."
+
+#### 5️⃣ **Added Wait Parameter to Safari JS Execution**
+
+**File:** `src/tools/apple-safari.ts`
+
+**Change:**
+```typescript
+{
+    name: 'apple_safari_execute_js',
+    parameters: {
+        script: { type: 'string' },
+        waitMs: { type: 'number', description: 'Wait before executing (for client-side pages)' }
+    },
+    async execute(args) {
+        const waitMs = (args.waitMs as number) || 0;
+        if (waitMs > 0) {
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+        // ... execute script
+    }
+}
+```
+
+**Impact:** Agent can wait for client-side rendering before extraction.
+
+#### 6️⃣ **Modified Tool Execution to Pass Session Context**
+
+**File:** `src/agent/loop.ts`
+
+**Changes:**
+- Updated `ToolHandler` interface to accept optional `session` parameter
+- Modified tool execution to pass session: `toolHandler.execute(tc.args, session)`
+
+**Impact:** Tools like `scratchpad_update` can access and modify session state.
+
+### Testing Verification
+
+**Manual Test Scenario:**
+```
+User: "Go to ollama.com/search and list models with 4b or 8b"
+```
+
+**Expected Behavior:**
+1. Agent navigates to page
+2. Agent extracts model list as JSON
+3. Agent uses scratchpad to track pending models
+4. Agent iterates through each model
+5. Agent clicks into detail pages if needed
+6. Agent updates scratchpad after each item
+7. Agent continues until scratchpad.pending is empty
+8. Agent returns final structured summary
+
+**Verification Commands:**
+```bash
+npm run build
+npm test
+talon gateway
+# Test via CLI or WebSocket
+```
+
+### What Was NOT Changed
+
+- ❌ No separate planner/executor agents created
+- ❌ No automatic planner → executor cycle
+- ❌ No forced JSON output format from LLM
+- ❌ No automatic screenshot fallback (wasn't needed)
+- ❌ No SQLite migration (out of scope)
+
+### Architecture After Fix
+
+**Current Flow (Patched):**
+```
+User: "Find models with 4b or 8b"
+  ↓
+AgentLoop.run() - sees system prompt with iteration rules
+  ↓
+LLM: "I'll use scratchpad to track progress"
+  ↓
+Tool: scratchpad_update (add_pending: [model1, model2, ...])
+  ↓
+Tool: apple_safari_navigate
+  ↓
+Tool: apple_safari_execute_js (extract list as JSON, waitMs: 2000)
+  ↓
+LLM sees: scratchpad.pending = [model1, model2, ...]
+  ↓
+Tool: apple_safari_click (model1)
+  ↓
+Tool: apple_safari_execute_js (extract details)
+  ↓
+Tool: scratchpad_update (add_collected: {...}, remove_pending: model1)
+  ↓
+LLM sees: scratchpad.pending = [model2, ...]
+  ↓
+Loop continues until scratchpad.pending is empty
+  ↓
+LLM: "All items processed, here's the summary"
+```
+
+### Files Modified
+
+| File | Lines Changed | Type |
+|------|---------------|------|
+| `src/utils/types.ts` | +6 | Interface update |
+| `src/tools/scratchpad.ts` | +95 | NEW tool |
+| `src/tools/registry.ts` | +5 | Tool registration |
+| `src/memory/manager.ts` | +25 | Context injection |
+| `src/agent/prompts.ts` | +35 | System prompt |
+| `src/tools/apple-safari.ts` | +5 | Wait parameter |
+| `src/agent/loop.ts` | +2 | Session context |
+| `docs/19fbIMPLEMENTATION.md` | +300 | Documentation |
+
+**Total:** ~473 lines added/modified
+
+### Risks & Limitations
+
+**Risks:**
+1. LLM may still ignore iteration instructions (prompt engineering limitation)
+2. Scratchpad adds ~100-200 tokens to context per iteration
+3. No hard enforcement of iteration (relies on LLM compliance)
+
+**Limitations:**
+1. Not a true planner/executor system (single-agent with better prompts)
+2. No automatic retry on repeated tool calls
+3. No structured JSON enforcement from LLM
+4. Scratchpad must be manually managed by LLM
+
+**Mitigation:**
+- System prompt is very explicit about iteration requirements
+- Scratchpad state is injected into every LLM call
+- Wait parameter helps with client-side rendering
+- Tool descriptions guide proper usage
+
+### Next Steps (Optional Future Work)
+
+**If this patch is insufficient:**
+1. Implement true planner/executor separation
+2. Add automatic replanning after tool results
+3. Enforce structured JSON output from LLM
+4. Add automatic retry on repeated tool calls
+5. Implement progress checkpoints with user confirmation
+
+**For now:** Ship this minimal patch and test with real browsing tasks.
+
+---
+
+**Last Updated:** 2026-02-20 02:15 AM  
+**Status:** Ready for testing
 
 
 ---

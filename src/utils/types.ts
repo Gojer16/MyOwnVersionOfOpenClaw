@@ -251,6 +251,12 @@ export interface Session {
         thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
         verboseLevel?: boolean;
     };
+    scratchpad?: {
+        visited?: string[];
+        collected?: any[];
+        pending?: string[];
+        progress?: Record<string, any>;
+    };
 }
 
 // ─── Channel ──────────────────────────────────────────────────────

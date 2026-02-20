@@ -66,9 +66,10 @@ export class MemoryManager {
      *
      * This is the core function — it assembles exactly what the LLM sees:
      * 1. System prompt (~500 tokens) - LOADED FRESH EVERY TIME
-     * 2. Memory summary (≤800 tokens)
-     * 3. Last N messages (~2000 tokens)
-     * 4. Tool results truncated (~500 tokens each)
+     * 2. Scratchpad state (if exists)
+     * 3. Memory summary (≤800 tokens)
+     * 4. Last N messages (~2000 tokens)
+     * 5. Tool results truncated (~500 tokens each)
      *
      * Total target: ~5000-6000 tokens
      */
@@ -95,7 +96,28 @@ export class MemoryManager {
             content: systemPrompt,
         });
 
-        // 2. Memory summary (if exists)
+        // 2. Scratchpad state (if exists) - for multi-step task tracking
+        if (session.scratchpad && Object.keys(session.scratchpad).length > 0) {
+            const scratchpadContent = `## Current Task Progress (Scratchpad)
+
+${session.scratchpad.visited && session.scratchpad.visited.length > 0 
+    ? `**Visited:** ${session.scratchpad.visited.join(', ')}\n` 
+    : ''}${session.scratchpad.collected && session.scratchpad.collected.length > 0 
+    ? `**Collected:** ${JSON.stringify(session.scratchpad.collected, null, 2)}\n` 
+    : ''}${session.scratchpad.pending && session.scratchpad.pending.length > 0 
+    ? `**Pending:** ${session.scratchpad.pending.join(', ')}\n` 
+    : ''}${session.scratchpad.progress 
+    ? `**Progress:** ${JSON.stringify(session.scratchpad.progress, null, 2)}\n` 
+    : ''}
+**Remember:** Continue iterating until scratchpad.pending is empty or task is complete.`;
+
+            messages.push({
+                role: 'system',
+                content: scratchpadContent,
+            });
+        }
+
+        // 3. Memory summary (if exists)
         if (session.memorySummary) {
             const truncatedSummary = truncateToTokens(
                 session.memorySummary,

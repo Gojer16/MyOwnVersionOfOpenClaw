@@ -38,7 +38,7 @@ interface ToolHandler {
     name: string;
     description: string;
     parameters: Record<string, unknown>;
-    execute: (args: Record<string, unknown>) => Promise<string>;
+    execute: (args: Record<string, unknown>, session?: Session) => Promise<string>;
 }
 
 // ─── Agent Loop ───────────────────────────────────────────────────
@@ -365,7 +365,7 @@ export class AgentLoop {
                                 args: tc.args,
                             });
 
-                            output = await toolHandler.execute(tc.args);
+                            output = await toolHandler.execute(tc.args, session);
                             success = true;
 
                             this.eventBus.emit('tool.complete', {
