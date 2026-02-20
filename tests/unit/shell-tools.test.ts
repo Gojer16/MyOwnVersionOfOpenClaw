@@ -1,245 +1,139 @@
-// ─── Shell Tools Tests ────────────────────────────────────────────
-import { describe, it, expect, vi } from 'vitest';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { AgentLoop } from '../../src/agent/loop.js';
+import { ModelRouter } from '../../src/agent/router.js';
+import { MemoryManager } from '../../src/memory/manager.js';
+import { MemoryCompressor } from '../../src/memory/compressor.js';
+import { EventBus } from '../../src/gateway/events.js';
+import { registerAllTools } from '../../src/tools/registry.js';
+import type { TalonConfig } from '../../src/config/schema.js';
+import type { NormalizedToolResult } from '../../src/tools/normalize.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
-const execAsync = promisify(exec);
+describe('Shell Tools Comprehensive', () => {
+    let agentLoop: AgentLoop;
+    let testDir: string;
 
-interface ShellResult {
-    success: boolean;
-    stdout?: string;
-    stderr?: string;
-    exitCode?: number;
-    error?: string;
-}
+    beforeAll(async () => {
+        testDir = path.join(os.tmpdir(), `talon-shell-test-${Date.now()}`);
+        fs.mkdirSync(testDir, { recursive: true });
 
-class MockShellTools {
-    private blockedCommands = ['rm -rf /', 'sudo rm', 'format'];
+        const config: TalonConfig = {
+            workspace: { root: testDir },
+            agent: { model: 'test', maxIterations: 5, subagentModel: 'test', providers: {} },
+            tools: {
+                files: { enabled: false, allowedPaths: [], deniedPaths: [], maxFileSize: 1048576 },
+                shell: {
+                    enabled: true,
+                    defaultTimeout: 5000,
+                    maxOutputSize: 10000,
+                    blockedCommands: ['rm -rf /', 'sudo rm', 'format'],
+                    confirmDestructive: true,
+                },
+                browser: { enabled: false },
+            },
+            memory: { compaction: { enabled: false, keepRecentMessages: 10 } },
+            channels: { cli: { enabled: true }, telegram: { enabled: false }, whatsapp: { enabled: false } },
+            gateway: { host: '127.0.0.1', port: 19789, token: null },
+            hooks: { bootMd: { enabled: false } },
+            shadow: { enabled: false, watchPaths: [], ignorePatterns: [] },
+        } as TalonConfig;
 
-    async execute(command: string, timeout = 30000): Promise<ShellResult> {
-        // Check blocked commands
-        if (this.isBlocked(command)) {
-            return {
-                success: false,
-                error: 'Command blocked for safety',
-            };
-        }
+        const eventBus = new EventBus();
+        const modelRouter = new ModelRouter(config);
+        const memoryManager = new MemoryManager({ workspaceRoot: testDir, maxContextTokens: 6000, maxSummaryTokens: 800, keepRecentMessages: 10 });
+        const memoryCompressor = new MemoryCompressor(modelRouter);
+        agentLoop = new AgentLoop(modelRouter, memoryManager, memoryCompressor, eventBus, { maxIterations: 5 });
+        registerAllTools(agentLoop, config);
+    });
 
-        try {
-            const { stdout, stderr } = await execAsync(command, {
-                timeout,
-                maxBuffer: 1024 * 1024, // 1MB
-            });
-
-            return {
-                success: true,
-                stdout: stdout.trim(),
-                stderr: stderr.trim(),
-                exitCode: 0,
-            };
-        } catch (error: any) {
-            return {
-                success: false,
-                stdout: error.stdout?.trim(),
-                stderr: error.stderr?.trim(),
-                exitCode: error.code,
-                error: error.message,
-            };
-        }
-    }
-
-    private isBlocked(command: string): boolean {
-        return this.blockedCommands.some(blocked => 
-            command.toLowerCase().includes(blocked.toLowerCase())
-        );
-    }
-}
-
-describe('Shell Tools', () => {
-    let shellTools: MockShellTools;
-
-    beforeEach(() => {
-        shellTools = new MockShellTools();
+    afterAll(() => {
+        if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     });
 
     describe('shell_execute', () => {
-        it('should execute simple command', async () => {
-            const result = await shellTools.execute('echo "Hello World"');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('Hello World');
-            expect(result.exitCode).toBe(0);
+        it('should execute simple commands', async () => {
+            const result = await agentLoop.executeTool('shell_execute', { command: 'echo "test"' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(true);
+            expect(parsed.data).toContain('test');
         });
 
-        it('should execute command with output', async () => {
-            const result = await shellTools.execute('pwd');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBeDefined();
-            expect(result.stdout!.length).toBeGreaterThan(0);
+        it('should respect working directory', async () => {
+            const result = await agentLoop.executeTool('shell_execute', { command: 'pwd', cwd: testDir });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(true);
+            expect(parsed.data).toContain(testDir);
         });
 
-        it('should handle command with arguments', async () => {
-            const result = await shellTools.execute('printf "test"');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('test');
+        it('should capture stdout', async () => {
+            const result = await agentLoop.executeTool('shell_execute', { command: 'echo "stdout test"' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(true);
+            expect(parsed.data).toContain('stdout test');
         });
 
         it('should capture stderr', async () => {
-            const result = await shellTools.execute('node -e "console.error(\'error\')"');
-
-            expect(result.success).toBe(true);
-            expect(result.stderr).toContain('error');
+            const result = await agentLoop.executeTool('shell_execute', { command: 'ls /nonexistent 2>&1' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(true);
+            expect(parsed.data).toContain('No such file');
         });
 
-        it('should handle command failure', async () => {
-            const result = await shellTools.execute('exit 1');
-
-            expect(result.success).toBe(false);
-            expect(result.exitCode).toBe(1);
+        it('should block dangerous commands', async () => {
+            const result = await agentLoop.executeTool('shell_execute', { command: 'rm -rf /' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(false);
+            expect(parsed.error?.message).toContain('rm -rf /');
         });
 
-        it('should handle non-existent command', async () => {
-            const result = await shellTools.execute('nonexistentcommand123');
-
-            expect(result.success).toBe(false);
-            expect(result.error).toBeDefined();
-        });
-    });
-
-    describe('Safety Features', () => {
-        it('should block dangerous rm command', async () => {
-            const result = await shellTools.execute('rm -rf /');
-
-            expect(result.success).toBe(false);
-            expect(result.error).toContain('blocked');
+        it('should block destructive patterns', async () => {
+            const result = await agentLoop.executeTool('shell_execute', { command: 'rm -rf *' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(false);
+            expect(parsed.error?.message).toContain('Destructive');
         });
 
-        it('should block sudo rm command', async () => {
-            const result = await shellTools.execute('sudo rm -rf /home');
-
-            expect(result.success).toBe(false);
-            expect(result.error).toContain('blocked');
-        });
-
-        it('should block format command', async () => {
-            const result = await shellTools.execute('format c:');
-
-            expect(result.success).toBe(false);
-            expect(result.error).toContain('blocked');
-        });
-
-        it('should allow safe rm commands', async () => {
-            const result = await shellTools.execute('echo "rm file.txt"');
-
-            expect(result.success).toBe(true);
-        });
-    });
-
-    describe('Command Chaining', () => {
-        it('should execute piped commands', async () => {
-            const result = await shellTools.execute('echo "hello" | tr a-z A-Z');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('HELLO');
-        });
-
-        it('should execute commands with &&', async () => {
-            const result = await shellTools.execute('echo "first" && echo "second"');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toContain('first');
-            expect(result.stdout).toContain('second');
-        });
-
-        it('should handle command substitution', async () => {
-            const result = await shellTools.execute('echo $(echo "nested")');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('nested');
-        });
-    });
-
-    describe('Environment Variables', () => {
-        it('should access environment variables', async () => {
-            const result = await shellTools.execute('echo $HOME');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBeDefined();
-            expect(result.stdout!.length).toBeGreaterThan(0);
-        });
-
-        it('should handle undefined variables', async () => {
-            const result = await shellTools.execute('echo $NONEXISTENT_VAR_12345');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('');
-        });
-    });
-
-    describe('Timeout Handling', () => {
-        it('should timeout long-running commands', async () => {
-            const result = await shellTools.execute('sleep 10', 100);
-
-            expect(result.success).toBe(false);
-            expect(result.error).toBeDefined();
-        }, 10000);
-
-        it('should complete fast commands within timeout', async () => {
-            const result = await shellTools.execute('echo "fast"', 5000);
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('fast');
-        });
-    });
-
-    describe('Output Handling', () => {
-        it('should handle large output', async () => {
-            const result = await shellTools.execute('seq 1 100');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBeDefined();
-            expect(result.stdout!.split('\n').length).toBe(100);
-        });
-
-        it('should handle empty output', async () => {
-            const result = await shellTools.execute('true');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('');
+        it('should handle command not found', async () => {
+            const result = await agentLoop.executeTool('shell_execute', { command: 'nonexistentcommand123' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(true);
+            // Different shells have different error messages
+            expect(parsed.data).toMatch(/not found|command not found/i);
         });
 
         it('should handle multiline output', async () => {
-            const result = await shellTools.execute('echo -e "line1\\nline2\\nline3"');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toContain('line1');
-            expect(result.stdout).toContain('line2');
-            expect(result.stdout).toContain('line3');
-        });
-    });
-
-    describe('Special Characters', () => {
-        it('should handle quotes in commands', async () => {
-            const result = await shellTools.execute('echo "hello \\"world\\""');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toContain('world');
+            const result = await agentLoop.executeTool('shell_execute', { command: 'echo "line1"; echo "line2"; echo "line3"' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(true);
+            expect(parsed.data).toContain('line1');
+            expect(parsed.data).toContain('line2');
+            expect(parsed.data).toContain('line3');
         });
 
-        it('should handle special characters', async () => {
-            const result = await shellTools.execute('echo "!@#$%^&*()"');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('!@#$%^&*()');
+        it('should handle exit codes', async () => {
+            const result = await agentLoop.executeTool('shell_execute', { command: 'exit 42' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(true);
+            expect(parsed.data).toContain('Exit code: 42');
         });
 
-        it('should handle unicode characters', async () => {
-            const result = await shellTools.execute('echo "你好世界"');
-
-            expect(result.success).toBe(true);
-            expect(result.stdout).toBe('你好世界');
+        it('should handle pipes', async () => {
+            const result = await agentLoop.executeTool('shell_execute', { command: 'echo "hello world" | grep world' });
+            const parsed: NormalizedToolResult = JSON.parse(result);
+            
+            expect(parsed.success).toBe(true);
+            expect(parsed.data).toContain('world');
         });
     });
 });
