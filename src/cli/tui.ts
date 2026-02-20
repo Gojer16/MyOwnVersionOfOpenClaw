@@ -104,7 +104,7 @@ export async function startTUI(): Promise<void> {
 
         // Handle slash commands
         if (input.startsWith('/')) {
-            handleSlashCommand(input, rl, ws);
+            handleSlashCommand(input, rl, ws, renderer);
             return;
         }
 
@@ -128,10 +128,22 @@ export async function startTUI(): Promise<void> {
         process.exit(0);
     });
 
-    // Handle Ctrl+C
+    // ─── Handle Ctrl+C gracefully ─────
+    let ctrlCCount = 0;
     process.on('SIGINT', () => {
-        ws.close();
-        rl.close();
+        ctrlCCount++;
+        if (ctrlCCount === 1) {
+            console.log('\n');
+            console.log(chalk.yellow('  ⚠️  Press Ctrl+C again to exit'));
+            rl.prompt();
+            setTimeout(() => { ctrlCCount = 0; }, 2000);
+        } else {
+            console.log('\n');
+            console.log(chalk.gray('  👋 Goodbye!'));
+            ws.close();
+            rl.close();
+            process.exit(0);
+        }
     });
 }
 
@@ -154,7 +166,7 @@ function sendToGateway(ws: WebSocket, text: string): void {
 
 // ─── Slash Commands ──────────────────────────────────────────────
 
-function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket): void {
+function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket, renderer: TerminalRenderer): void {
     const [cmd, ...args] = input.slice(1).split(' ');
 
     switch (cmd) {
@@ -190,6 +202,17 @@ function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket
             rl.prompt();
             break;
 
+        case 'debug':
+            renderer.showToolOutputs = !renderer.showToolOutputs;
+            const status = renderer.showToolOutputs ? chalk.green('ON') : chalk.red('OFF');
+            console.log(chalk.yellow(`\n🔧 Debug mode: ${status}`));
+            console.log(chalk.dim(renderer.showToolOutputs 
+                ? '  Raw tool outputs will be shown' 
+                : '  Tool outputs hidden (clean UX)'));
+            console.log('');
+            rl.prompt();
+            break;
+
         case 'provider':
             console.log(chalk.yellow('\n⚠ Run provider setup as a separate command:\n'));
             console.log(chalk.dim('  $ talon setup\n'));
@@ -209,7 +232,6 @@ function handleSlashCommand(input: string, rl: readline.Interface, ws: WebSocket
         case 'compact':
         case 'tokens':
         case 'memory':
-        case 'debug':
             // Send to agent
             sendToGateway(ws, input);
             break;
@@ -246,6 +268,10 @@ function showHelp(): void {
     console.log('  /new        Alias for /reset');
     console.log('  /compact    Force memory compression');
     console.log('  /tokens     Show estimated token usage');
+    console.log('');
+    console.log(chalk.bold('Display'));
+    console.log('  /debug      Toggle raw tool output visibility');
+    console.log('  /clear      Clear screen');
     console.log('');
 
     console.log(chalk.bold('System'));

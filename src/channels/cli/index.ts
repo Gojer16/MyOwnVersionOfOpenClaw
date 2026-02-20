@@ -77,6 +77,24 @@ export class CliChannel extends BaseChannel {
             completer: (line: string) => this.completer(line),
         });
 
+        // ─── Handle Ctrl+C gracefully ─────
+        let ctrlCCount = 0;
+        process.on('SIGINT', () => {
+            ctrlCCount++;
+            if (ctrlCCount === 1) {
+                console.log('\n');
+                console.log(chalk.yellow('  ⚠️  Press Ctrl+C again to exit'));
+                this.prompt();
+                setTimeout(() => { ctrlCCount = 0; }, 2000);
+            } else {
+                console.log('\n');
+                console.log(chalk.gray('  👋 Goodbye!'));
+                this.isShutdown = true;
+                this.rl?.close();
+                process.exit(0);
+            }
+        });
+
         // ─── Shared Renderer (single source of truth for display) ─────
         this.renderer = new TerminalRenderer(
             () => this.prompt(),
