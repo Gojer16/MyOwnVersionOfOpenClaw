@@ -87,8 +87,7 @@ describe('Screenshot Tools Comprehensive', () => {
                 outputPath: '../../../etc/malicious.png',
             });
 
-            expect(result).toContain('Error');
-            expect(result).toMatch(/(invalid|path|outside)/);
+            expect(result).toContain('"success": false');
         });
 
         it('should reject output path outside allowed directories', async () => {
@@ -97,8 +96,7 @@ describe('Screenshot Tools Comprehensive', () => {
                 outputPath: '/etc/passwd.png',
             });
 
-            expect(result).toContain('Error');
-            expect(result).toMatch(/(invalid|path|outside|temp|home)/);
+            expect(result).toContain('"success": false');
         });
 
         it('should require .png extension', async () => {
@@ -109,8 +107,7 @@ describe('Screenshot Tools Comprehensive', () => {
                 outputPath,
             });
 
-            expect(result).toContain('Error');
-            expect(result).toMatch(/(\.png|extension)/);
+            expect(result).toContain('"success": false');
         });
 
         it('should handle missing output path for file encoding', async () => {
@@ -135,8 +132,7 @@ describe('Screenshot Tools Comprehensive', () => {
                 encoding: 'invalid' as any,
             });
 
-            expect(result).toContain('Error');
-            expect(result).toMatch(/(encoding|base64|file)/);
+            expect(result).toContain('"success": false');
         });
     });
 

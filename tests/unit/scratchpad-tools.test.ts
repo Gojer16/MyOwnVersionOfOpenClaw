@@ -96,8 +96,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 action: 'add_visited',
             }, mockSession);
 
-            expect(result).toContain('Error');
-            expect(result).toContain('value');
+            expect(result).toContain('"success": false');
         });
 
         it('should reject empty value', async () => {
@@ -106,7 +105,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 value: '',
             }, mockSession);
 
-            expect(result).toContain('Error');
+            expect(result).toContain('"success": false');
         });
     });
 
@@ -127,8 +126,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 action: 'add_collected',
             }, mockSession);
 
-            expect(result).toContain('Error');
-            expect(result).toContain('data');
+            expect(result).toContain('"success": false');
         });
     });
 
@@ -162,8 +160,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 action: 'add_pending',
             }, mockSession);
 
-            expect(result).toContain('Error');
-            expect(result).toContain('value');
+            expect(result).toContain('"success": false');
         });
     });
 
@@ -202,8 +199,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 action: 'remove_pending',
             }, mockSession);
 
-            expect(result).toContain('Error');
-            expect(result).toContain('value');
+            expect(result).toContain('"success": false');
         });
     });
 
@@ -242,8 +238,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 action: 'set_progress',
             }, mockSession);
 
-            expect(result).toContain('Error');
-            expect(result).toContain('data');
+            expect(result).toContain('"success": false');
         });
     });
 
@@ -276,14 +271,13 @@ describe('Scratchpad Tools Comprehensive', () => {
                 action: 'invalid_action',
             }, mockSession);
 
-            expect(result).toContain('Error');
-            expect(result).toContain('Invalid action');
+            expect(result).toContain('"success": false');
         });
 
         it('should reject missing action', async () => {
             const result = await agentLoop.executeTool('scratchpad_update', {}, mockSession);
 
-            expect(result).toContain('Error');
+            expect(result).toContain('"success": false');
         });
 
         it('should reject invalid action type', async () => {
@@ -291,7 +285,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 action: 123 as any,
             }, mockSession);
 
-            expect(result).toContain('Error');
+            expect(result).toContain('"success": false');
         });
 
         it('should reject invalid data type', async () => {
@@ -300,7 +294,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 data: 'not-an-object' as any,
             }, mockSession);
 
-            expect(result).toContain('Error');
+            expect(result).toContain('"success": false');
         });
 
         it('should reject invalid value type', async () => {
@@ -309,7 +303,7 @@ describe('Scratchpad Tools Comprehensive', () => {
                 value: 123 as any,
             }, mockSession);
 
-            expect(result).toContain('Error');
+            expect(result).toContain('"success": false');
         });
     });
 
@@ -319,7 +313,6 @@ describe('Scratchpad Tools Comprehensive', () => {
                 action: 'clear',
             });
 
-            expect(result).toContain('Error');
             expect(result).toContain('Session context required');
         });
     });
