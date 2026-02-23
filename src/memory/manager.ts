@@ -137,19 +137,24 @@ ${session.scratchpad.visited && session.scratchpad.visited.length > 0
         // Otherwise, OpenAI/DeepSeek throws a 400 error.
         while (recentMessages.length > 0 && recentMessages[0].role === 'tool') {
             const firstMsg = recentMessages[0];
-            const parentIndex = session.messages.indexOf(firstMsg) - 1;
-
-            if (parentIndex >= 0) {
-                const parent = session.messages[parentIndex];
-                if (parent && parent.role === 'assistant' && parent.toolCalls) {
-                    // Prepend the parent
+            // Find the actual parent by looking for the assistant message with matching tool call
+            const toolCallId = firstMsg.toolResults?.[0]?.metadata?.confirmation;
+            const parent = session.messages.find((m, idx) => 
+                m.role === 'assistant' && 
+                m.toolCalls?.some(tc => tc.id === toolCallId)
+            );
+            
+            if (parent) {
+                // Prepend the parent if not already present
+                if (!recentMessages.includes(parent)) {
                     recentMessages.unshift(parent);
                 } else {
-                    // Orphaned tool message with no valid parent? Drop it.
+                    // Tool message is orphaned (parent exists but not in recentMessages)
                     recentMessages.shift();
                 }
             } else {
-                // No parent exists? Drop it.
+                // No parent exists? Drop the orphaned tool message
+                logger.warn({ toolCallId }, 'Dropping orphaned tool message with no parent');
                 recentMessages.shift();
             }
         }
@@ -162,9 +167,8 @@ ${session.scratchpad.visited && session.scratchpad.visited.length > 0
         );
 
         for (const assistantMsg of assistantMsgsWithTools) {
-            const assistantIndex = session.messages.indexOf(assistantMsg);
             const expectedToolIds = new Set(assistantMsg.toolCalls!.map(tc => tc.id));
-            
+
             // Find which tool results we have in recentMessages
             const presentToolIds = new Set(
                 recentMessages
@@ -177,26 +181,31 @@ ${session.scratchpad.visited && session.scratchpad.visited.length > 0
             const missingToolIds = [...expectedToolIds].filter(id => !presentToolIds.has(id));
 
             if (missingToolIds.length > 0) {
-                // Look for missing tool messages in the full session history
+                // Look for missing tool messages in the FULL session history (not just recent)
                 const missingTools: Message[] = [];
-                for (let i = assistantIndex + 1; i < session.messages.length; i++) {
-                    const msg = session.messages[i];
-                    if (msg.role !== 'tool') break; // Stop at non-tool message
-                    
-                    const toolId = msg.toolResults?.[0]?.metadata?.confirmation;
-                    if (toolId && missingToolIds.includes(toolId)) {
-                        missingTools.push(msg);
+                for (const msg of session.messages) {
+                    if (msg.role === 'tool') {
+                        const toolId = msg.toolResults?.[0]?.metadata?.confirmation;
+                        if (toolId && missingToolIds.includes(toolId)) {
+                            missingTools.push(msg);
+                        }
                     }
                 }
 
                 // Add missing tool messages to recentMessages
                 if (missingTools.length > 0) {
                     logger.debug({
-                        assistantIndex,
                         missingCount: missingTools.length,
                         missingToolIds,
                     }, 'Adding missing tool messages to context');
                     recentMessages.unshift(...missingTools);
+                } else {
+                    // Tool results are truly missing (compressed out) - remove the assistant tool call
+                    logger.warn({
+                        assistantMsgId: assistantMsg.id,
+                        missingToolIds,
+                    }, 'Tool results compressed out, removing orphaned assistant tool call');
+                    recentMessages = recentMessages.filter(m => m !== assistantMsg);
                 }
             }
         }
