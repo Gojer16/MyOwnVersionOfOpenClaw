@@ -1,13 +1,26 @@
+import { z } from 'zod';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { writeFileSync, unlinkSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { z } from 'zod';
 import { logger } from '../utils/logger.js';
 import { parseDate, formatForDisplay, type DateParseResult, parseTimeRange } from './utils/date-parser.js';
+import {
+    type BulletproofOutput,
+    formatSuccess,
+    formatError,
+    escapeAppleScript,
+    normalizeString,
+    createBaseString,
+    safeExecAppleScript,
+    detectPermissionError,
+    getPermissionRecoverySteps,
+    checkAppPermission,
+    DELIMITER,
+} from './apple-shared.js';
 
 const execAsync = promisify(exec);
+
+// Re-export for backward compatibility
+export type { BulletproofOutput };
 
 // Permission cache to avoid repeated permission checks
 let permissionCache: { granted: boolean; checkedAt: number } | null = null;
@@ -21,95 +34,6 @@ export function __resetCalendarState() {
     permissionCache = null;
     operationLock = null;
 }
-
-// --- 4️⃣ Bulletproof Output Contract ---
-export interface BulletproofOutput {
-    success: boolean;
-    error?: {
-        code: string;
-        message: string;
-        recoverable: boolean;
-        recoverySteps?: string[];
-    };
-    data?: Record<string, any>;
-    metadata: {
-        timestamp: string;
-        duration_ms: number;
-        [key: string]: any;
-    };
-}
-
-// Helper to reliably return formatted fail/success
-function formatSuccess(data: Record<string, any>, metadata: Record<string, any>, startTime: number): string {
-    const result: BulletproofOutput = {
-        success: true,
-        data,
-        metadata: {
-            ...metadata,
-            timestamp: new Date().toISOString(),
-            duration_ms: Date.now() - startTime,
-        }
-    };
-    return JSON.stringify(result, null, 2);
-}
-
-function formatError(
-    code: string,
-    message: string,
-    recoverable: boolean,
-    metadata: Record<string, any>,
-    startTime: number,
-    recoverySteps?: string[]
-): string {
-    const result: BulletproofOutput = {
-        success: false,
-        error: {
-            code,
-            message,
-            recoverable,
-            ...(recoverySteps ? { recoverySteps } : {})
-        },
-        metadata: {
-            ...metadata,
-            timestamp: new Date().toISOString(),
-            duration_ms: Date.now() - startTime,
-        }
-    };
-    return JSON.stringify(result, null, 2);
-}
-
-// Safe delimiter for AppleScript output (rarely appears in text)
-const DELIMITER = '§';
-
-// --- 2️⃣ Bulletproof Internal Logic / Normalize Everything ---
-function normalizeString(str: string): string {
-    return str.trim().replace(/\s+/g, ' ').replace(/\.+$/, '');
-}
-
-function escapeAppleScript(str: string): string {
-    return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
-}
-
-function detectPermissionError(stderr: string): boolean {
-    const lower = stderr.toLowerCase();
-    return lower.includes('not authorized') ||
-        lower.includes('access denied') ||
-        lower.includes('not allowed');
-}
-
-function getPermissionRecoverySteps(): string[] {
-    return [
-        'Open System Settings',
-        'Go to Privacy & Security → Automation',
-        'Find Terminal (or your terminal app)',
-        'Enable the Calendar checkbox',
-        'Restart your terminal and try again',
-    ];
-}
-
-// --- 1️⃣ Runtime Schema Validation ---
-const createBaseString = (maxLength: number, lengthMsg: string) =>
-    z.string().trim().min(1, "String cannot be empty").max(maxLength, lengthMsg).transform(normalizeString);
 
 const RecurrenceSchema = z.object({
     frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
@@ -138,17 +62,7 @@ const DeleteEventSchema = z.object({
     calendar: createBaseString(100, "Calendar name too long").default("Talon"),
 }).strict();
 
-// Internal helper for bulletproof AppleScript execution
-async function safeExecAppleScript(script: string, timeoutMs: number = 10000): Promise<{ stdout: string, stderr: string }> {
-    const tempFile = join(tmpdir(), `talon-calendar-${Date.now()}-${Math.random().toString(36).substring(7)}.scpt`);
-    writeFileSync(tempFile, script, 'utf-8');
-    try {
-        const { stdout, stderr } = await execAsync(`osascript "${tempFile}"`, { timeout: timeoutMs });
-        return { stdout, stderr };
-    } finally {
-        try { unlinkSync(tempFile); } catch (e) { /* ignore cleanup errors */ }
-    }
-}
+// safeExecAppleScript is now imported from apple-shared.ts
 
 // Check if Calendar app is running
 async function isCalendarRunning(): Promise<boolean> {
@@ -163,12 +77,12 @@ async function isCalendarRunning(): Promise<boolean> {
 // Check Calendar permissions with caching
 async function checkCalendarPermission(): Promise<{ granted: boolean; needsCheck: boolean }> {
     const now = Date.now();
-    
+
     // Check cache first
     if (permissionCache && (now - permissionCache.checkedAt) < PERMISSION_CACHE_TTL) {
         return { granted: permissionCache.granted, needsCheck: false };
     }
-    
+
     // Test permission with a harmless read operation
     try {
         const testScript = `tell application "Calendar"
@@ -193,7 +107,7 @@ function checkDSTIssue(date: Date): { isDSTGap: boolean; isAmbiguous: boolean; m
     // Check for non-existent times during DST spring forward (2am-3am doesn't exist)
     const testDate = new Date(date);
     const localHour = testDate.getHours();
-    
+
     // In US timezones, 2am-3am on DST transition day doesn't exist
     if (localHour === 2 && testDate.getMonth() === 2) { // March
         // Check if this is a DST transition Sunday (second Sunday of March)
@@ -203,7 +117,7 @@ function checkDSTIssue(date: Date): { isDSTGap: boolean; isAmbiguous: boolean; m
             return { isDSTGap: true, isAmbiguous: false, message: 'This time may not exist due to DST transition' };
         }
     }
-    
+
     // Check for ambiguous times during DST fall back (1am-2am occurs twice)
     if (localHour === 1 && testDate.getMonth() === 10) { // November
         // Check if this is a DST transition Sunday (first Sunday of November)
@@ -213,7 +127,7 @@ function checkDSTIssue(date: Date): { isDSTGap: boolean; isAmbiguous: boolean; m
             return { isDSTGap: false, isAmbiguous: true, message: 'This time is ambiguous due to DST transition' };
         }
     }
-    
+
     return { isDSTGap: false, isAmbiguous: false };
 }
 
@@ -263,7 +177,7 @@ export const appleCalendarTools = [
             const permCheck = await checkCalendarPermission();
             if (!permCheck.granted) {
                 logger.warn('Calendar permission denied');
-                return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Calendar', true, {}, startTime, getPermissionRecoverySteps());
+                return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Calendar', true, {}, startTime, getPermissionRecoverySteps('Calendar'));
             }
             if (permCheck.needsCheck) {
                 logger.info('Calendar permission verified');
@@ -294,7 +208,7 @@ export const appleCalendarTools = [
                     // Remove the range portion and parse the remaining start time
                     const startTimeOnly = startDateInput.split(/\s+(?:to|until|–|-)\s+/)[0].trim();
                     startParsed = parseDate(startTimeOnly);
-                    
+
                     if (!startParsed.success) {
                         // If that fails, try parsing the full string as a single date
                         startParsed = parseDate(startDateInput);
@@ -313,7 +227,7 @@ export const appleCalendarTools = [
             }
 
             const startDate = startParsed.parsed!.date;
-            
+
             // Check for DST issues
             const dstCheck = checkDSTIssue(startDate);
             if (dstCheck.isDSTGap) {
@@ -412,7 +326,7 @@ export const appleCalendarTools = [
             // Add recurrence if specified
             if (args.recurrence) {
                 const { frequency, interval = 1, endDate, count } = args.recurrence;
-                
+
                 // Validate recurrence end date
                 if (endDate) {
                     const recEndParsed = parseDate(endDate);
@@ -421,7 +335,7 @@ export const appleCalendarTools = [
                         // Continue without end date - don't fail the whole operation
                     }
                 }
-                
+
                 // Map frequency to AppleScript recurrence unit
                 const freqMap: Record<string, string> = {
                     daily: 'days',
@@ -472,7 +386,7 @@ end tell`;
             if (operationLock) {
                 logger.warn('Concurrent calendar operation detected, proceeding with caution');
             }
-            
+
             // Create operation promise for locking
             const operationPromise = (async () => {
                 try {
@@ -482,7 +396,7 @@ end tell`;
 
                     if (stderr && detectPermissionError(stderr)) {
                         logger.error({ stderr }, 'Calendar permission denied');
-                        return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Calendar', true, { applescriptOutput: stderr }, startTime, getPermissionRecoverySteps());
+                        return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Calendar', true, { applescriptOutput: stderr }, startTime, getPermissionRecoverySteps('Calendar'));
                     }
 
                     const output = stdout.trim();
@@ -516,7 +430,7 @@ end tell`;
                         endDate: endDate.toLocaleString(), // Keep local time, not ISO
                         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
                     };
-                    
+
                     // Add recurrence info if applicable
                     if (args.recurrence) {
                         responseData.recurrence = {
@@ -527,7 +441,7 @@ end tell`;
                         };
                         responseData.message += ` (recurring: ${args.recurrence.interval}x ${args.recurrence.frequency})`;
                     }
-                    
+
                     // Add DST warning if applicable
                     if (dstCheck.isAmbiguous) {
                         responseData.dstWarning = dstCheck.message;
@@ -539,7 +453,7 @@ end tell`;
                     operationLock = null;
                 }
             })();
-            
+
             // Set the lock and wait
             operationLock = operationPromise;
             return await operationPromise.catch((error) => {
@@ -556,7 +470,7 @@ end tell`;
                         applescriptOutput: err.stderr,
                         title: args.title,
                         calendar: calendarName
-                    }, startTime, getPermissionRecoverySteps());
+                    }, startTime, getPermissionRecoverySteps('Calendar'));
                 }
                 logger.error({ error: err, title: args.title, calendar: calendarName }, 'Failed to create calendar event');
                 return formatError('APPLESCRIPT_ERROR', err.message || 'Unknown AppleScript error', false, {
@@ -625,7 +539,7 @@ end tell`;
                 const { stdout, stderr } = await safeExecAppleScript(script, 10000);
 
                 if (stderr && detectPermissionError(stderr)) {
-                    return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Calendar', true, {}, startTime, getPermissionRecoverySteps());
+                    return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Calendar', true, {}, startTime, getPermissionRecoverySteps('Calendar'));
                 }
 
                 const output = stdout.trim();
@@ -674,7 +588,7 @@ end tell`;
                         applescriptOutput: err.stderr,
                         calendar: calendarFilter,
                         days: args.days
-                    }, startTime, getPermissionRecoverySteps());
+                    }, startTime, getPermissionRecoverySteps('Calendar'));
                 }
                 logger.error({ error: err, calendar: calendarFilter, days: args.days }, 'Failed to list calendar events');
                 return formatError('APPLESCRIPT_ERROR', err.message, false, {
@@ -715,7 +629,7 @@ end tell`;
             const exactMatch = args.exact === true;
 
             // Use case-insensitive contains matching by default
-            const matchLogic = exactMatch 
+            const matchLogic = exactMatch
                 ? `summary of anEvent is "${title}"`
                 : `summary of anEvent contains "${title}"`;
 
@@ -752,11 +666,11 @@ end tell`;
                 const { stdout, stderr } = await safeExecAppleScript(script, 10000);
 
                 if (stderr && detectPermissionError(stderr)) {
-                    return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Calendar', true, { 
+                    return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Calendar', true, {
                         applescriptOutput: stderr,
                         calendar: calendarName,
-                        title: args.title 
-                    }, startTime, getPermissionRecoverySteps());
+                        title: args.title
+                    }, startTime, getPermissionRecoverySteps('Calendar'));
                 }
 
                 const output = stdout.trim();
@@ -785,7 +699,7 @@ end tell`;
 
                 logger.info({ title: args.title, calendar: calendarName, deletedCount }, 'Calendar event(s) deleted');
                 return formatSuccess({
-                    message: deletedCount === 1 
+                    message: deletedCount === 1
                         ? `Event deleted: "${args.title}" from calendar "${calendarName}"`
                         : `Deleted 1 event matching "${args.title}" (${deletedCount} total matches found)`,
                     calendar: calendarName,
@@ -807,7 +721,7 @@ end tell`;
                         applescriptOutput: err.stderr,
                         calendar: calendarName,
                         title: args.title
-                    }, startTime, getPermissionRecoverySteps());
+                    }, startTime, getPermissionRecoverySteps('Calendar'));
                 }
                 logger.error({ error: err, calendar: calendarName, title: args.title }, 'Failed to delete calendar event');
                 return formatError('APPLESCRIPT_ERROR', err.message, false, {
