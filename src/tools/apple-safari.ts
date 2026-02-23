@@ -158,18 +158,23 @@ end tell`;
                 await new Promise(resolve => setTimeout(resolve, waitMs));
             }
             
-            // Escape quotes and backslashes for AppleScript
+            // Use heredoc to avoid shell escaping issues with complex JavaScript
             const escapedScript = userScript.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            
-            const script = `tell application "Safari" to tell front document to do JavaScript "${escapedScript}"`;
+            const script = `osascript <<'EOF'
+tell application "Safari"
+    tell front document
+        do JavaScript "${escapedScript}"
+    end tell
+end tell
+EOF`;
 
             try {
-                const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
+                const { stdout } = await execAsync(script, { timeout: 30000, shell: '/bin/bash' });
                 const result = stdout.trim();
-                logger.info({ script: userScript, result }, 'JavaScript executed in Safari');
+                logger.info({ scriptLength: userScript.length }, 'JavaScript executed in Safari');
                 return result || 'JavaScript executed successfully (no return value)';
             } catch (error) {
-                logger.error({ error, script: userScript }, 'Failed to execute JavaScript in Safari');
+                logger.error({ error }, 'Failed to execute JavaScript in Safari');
                 return `Error: ${(error as Error).message}`;
             }
         },
