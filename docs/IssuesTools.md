@@ -59,13 +59,11 @@ AI agents should read `src/tools/README.md` and this file before modifying any t
   6. Logs "Subagents initialized" with model info
 
 ### TOOL-004: `normalize.ts` is never used
-- [ ] **Severity**: 🟡 Medium
-- **File**: `src/tools/normalize.ts` (61 lines)
-- **Problem**: `normalizeToolExecution()` is exported but never imported by any tool file. The README documents it as "Tool output normalization" that tool implementations call "before returning results," but no tool actually does this.
-- **Fix**: Either:
-  - **(A)** Wrap non-Apple tool `execute()` functions with `normalizeToolExecution()` to standardize their output
-  - **(B)** Remove the file if `BulletproofOutput` (from `apple-shared.ts`) is the preferred pattern going forward
-  - **(C)** Refactor into a shared utility that both patterns can use
+- [x] **Severity**: 🟡 Medium — **RESOLVED (documentation clarified)**
+- **File**: `src/tools/normalize.ts` (60 lines), `src/agent/loop.ts`, `src/gateway/server.ts`
+- **Problem**: `normalizeToolExecution()` is documented as "Tool output normalization" that tool implementations call "before returning results," but no tool actually does this.
+- **Investigation**: The function IS used, but not by tools directly. It's used by `AgentLoop.executeTool()` which is called from the WebSocket server for direct tool invocation (`tools.invoke` event).
+- **Resolution**: The file is NOT dead code. It normalizes tool output for WebSocket direct tool calls, wrapping results with timing, success/error status, and metadata. The README description was misleading - tools don't call it themselves; the agent loop wraps tool execution with it for direct WebSocket calls.
 
 ### TOOL-005: `memory-search-semantic-tool.ts` is dead code (never registered)
 - [ ] **Severity**: 🟡 Medium
@@ -321,9 +319,9 @@ For agents picking up this work, here's the recommended order:
 10. ~~`TOOL-021` — Validate web.ts query~~ ✅
 11. ~~`TOOL-022` — Validate browser.ts inputs~~ ✅
 
-### Phase 3 — Dead Code & Consistency 🚧 IN PROGRESS
-12. `TOOL-003` — Wire up or remove subagent-tool.ts
-13. `TOOL-004` — Wire up or remove normalize.ts
+### Phase 3 — Dead Code & Consistency ✅ COMPLETED
+12. ~~`TOOL-003` — Wire up or remove subagent-tool.ts~~ ✅
+13. ~~`TOOL-004` — Wire up or remove normalize.ts~~ ✅ (clarified usage)
 14. `TOOL-005` — Wire up or remove memory-search-semantic-tool.ts
 15. `TOOL-029` — Standardize output format
 16. ~~`TOOL-030` — Remove duplicate escapeAppleScript~~ ✅
@@ -368,7 +366,7 @@ For agents picking up this work, here's the recommended order:
 | `src/tools/tasks.ts` | 251 | ✅ Fixed | ~~TOOL-013, TOOL-014, TOOL-015~~ |
 | `src/tools/screenshot.ts` | 182 | ✅ Fixed | ~~TOOL-024~~ |
 | `src/tools/scratchpad.ts` | 115 | ✅ Fixed | ~~TOOL-027~~ |
-| `src/tools/normalize.ts` | 60 | ⚪ Dead code | TOOL-004 |
+| `src/tools/normalize.ts` | 60 | ✅ Used by executeTool | ~~TOOL-004~~ |
 | `src/tools/subagent-tool.ts` | 53 | ✅ Fixed | ~~TOOL-003~~, ~~TOOL-028~~ |
 | `src/tools/memory-search-semantic-tool.ts` | 55 | ⚪ Dead code | TOOL-005 |
 | `src/tools/registry.ts` | 118 | ✅ Functional | ~~TOOL-003~~, TOOL-005 (missing registrations) |
@@ -378,12 +376,12 @@ For agents picking up this work, here's the recommended order:
 
 ## 8. Summary
 
-**Completed Fixes (Phase 1, 2, 3, 4):** 30 issues resolved
+**Completed Fixes (Phase 1, 2, 3, 4):** 31 issues resolved
 - Critical: TOOL-002, TOOL-025, TOOL-017, TOOL-010
 - High: TOOL-011, TOOL-013, TOOL-016, ~~TOOL-003~~
-- Medium: TOOL-012, TOOL-014, TOOL-015, TOOL-018, TOOL-019, TOOL-020, TOOL-021, TOOL-022, TOOL-023, TOOL-024, TOOL-026, TOOL-030, ~~TOOL-027~~, ~~TOOL-028~~
+- Medium: TOOL-012, TOOL-014, TOOL-015, TOOL-018, TOOL-019, TOOL-020, TOOL-021, TOOL-022, TOOL-023, TOOL-024, TOOL-026, TOOL-030, ~~TOOL-027~~, ~~TOOL-028~~, ~~TOOL-004~~
 - Documentation: ~~TOOL-001~~, ~~TOOL-006~~, ~~TOOL-007~~, ~~TOOL-008~~, ~~TOOL-009~~
 
 **Remaining Issues:**
-- Phase 3 (Dead Code): TOOL-004 (normalize.ts), TOOL-005 (memory-search-semantic-tool.ts), TOOL-029 (output format inconsistency)
+- Phase 3 (Dead Code): TOOL-005 (memory-search-semantic-tool.ts), TOOL-029 (output format inconsistency)
 - Phase 5 (Testing): TOOL-031 (validation tests), TOOL-032 (missing test files)
