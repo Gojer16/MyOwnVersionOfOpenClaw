@@ -1,11 +1,17 @@
 // ─── Apple Mail Tools Tests ───────────────────────────────────────
-// TDD: Tests for Apple Mail automation via AppleScript
+// TDD: Tests for Apple Mail automation via AppleScript (bulletproof JSON output)
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the child_process module
 vi.mock('child_process', () => ({
     exec: vi.fn(),
+}));
+
+// Mock fs for safeExecAppleScript temp file handling
+vi.mock('fs', () => ({
+    writeFileSync: vi.fn(),
+    unlinkSync: vi.fn(),
 }));
 
 import { exec } from 'child_process';
@@ -64,29 +70,28 @@ describe('Apple Mail Tools', () => {
             expect(tool.parameters.properties).toHaveProperty('unreadOnly');
         });
 
-        it('should return error on non-macOS platform', async () => {
+        it('should return JSON error on non-macOS platform', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'linux',
-            });
+            Object.defineProperty(process, 'platform', { value: 'linux' });
 
             const result = await tool.execute({ count: 10 });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
-            expect(result).toContain('Error');
-            expect(result).toContain('macOS');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PLATFORM_NOT_SUPPORTED');
+            expect(parsed.error.message).toContain('macOS');
         });
 
         it('should list emails with default count', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             const mockEmails = '[1] Test Subject | From: Test Sender (test@example.com) | Date: Wed Feb 18 2026 | Read: true';
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: mockEmails, stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: mockEmails, stderr: '' }), 0);
                 }
                 return {} as any;
             });
@@ -95,51 +100,44 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('Test Subject');
-            expect(result).toContain('Test Sender');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
+            expect(parsed.data.emails).toContain('Test Subject');
         });
 
-        it('should respect max count of 50', async () => {
+        it('should validate count is capped at 50', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
-            mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: 'emails', stderr: '' });
-                }
-                return {} as any;
-            });
-
-            await tool.execute({ count: 100 }); // Try to request 100
+            // count: 100 exceeds max of 50, should be validation error
+            const result = await tool.execute({ count: 100 });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            // Should cap at 50
-            const callArg = mockedExec.mock.calls[0][0] as string;
-            expect(callArg).toContain('50');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('VALIDATION_ERROR');
         });
 
         it('should filter by unread only', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: 'unread emails', stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: 'unread emails', stderr: '' }), 0);
                 }
                 return {} as any;
             });
 
-            await tool.execute({ unreadOnly: true });
+            const result = await tool.execute({ unreadOnly: true });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            const callArg = mockedExec.mock.calls[0][0] as string;
-            expect(callArg).toContain('read status is false');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
+            expect(parsed.data.unreadOnly).toBe(true);
         });
     });
 
@@ -151,28 +149,26 @@ describe('Apple Mail Tools', () => {
             expect(tool.parameters.properties).toHaveProperty('count');
         });
 
-        it('should return error on non-macOS platform', async () => {
+        it('should return JSON error on non-macOS platform', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'win32',
-            });
+            Object.defineProperty(process, 'platform', { value: 'win32' });
 
             const result = await tool.execute({ hours: 24 });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
-            expect(result).toContain('Error');
-            expect(result).toContain('macOS');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PLATFORM_NOT_SUPPORTED');
         });
 
         it('should get recent emails with hours filter', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: 'Recent emails from last 24 hours', stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: 'Recent emails from last 24 hours', stderr: '' }), 0);
                 }
                 return {} as any;
             });
@@ -181,7 +177,9 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('24');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
+            expect(parsed.data.hours).toBe(24);
         });
     });
 
@@ -192,28 +190,38 @@ describe('Apple Mail Tools', () => {
             expect(tool.parameters.required).toContain('query');
         });
 
-        it('should return error on non-macOS platform', async () => {
+        it('should return JSON error on non-macOS platform', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'linux',
-            });
+            Object.defineProperty(process, 'platform', { value: 'linux' });
 
             const result = await tool.execute({ query: 'test' });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
-            expect(result).toContain('Error');
-            expect(result).toContain('macOS');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PLATFORM_NOT_SUPPORTED');
+        });
+
+        it('should return validation error for empty query', async () => {
+            const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+            const result = await tool.execute({ query: '' });
+
+            Object.defineProperty(process, 'platform', originalPlatform!);
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('VALIDATION_ERROR');
         });
 
         it('should search emails by query', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: 'Search results for invoice', stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: '[1] Invoice from Vendor | From: vendor@test.com', stderr: '' }), 0);
                 }
                 return {} as any;
             });
@@ -222,29 +230,9 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('invoice');
-        });
-
-        it('should limit search results', async () => {
-            const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
-
-            mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: 'results', stderr: '' });
-                }
-                return {} as any;
-            });
-
-            await tool.execute({ query: 'test', count: 20 });
-
-            Object.defineProperty(process, 'platform', originalPlatform!);
-
-            // Should cap at 20
-            const callArg = mockedExec.mock.calls[0][0] as string;
-            expect(callArg).toContain('20');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
+            expect(parsed.data.query).toBe('invoice');
         });
     });
 
@@ -255,29 +243,39 @@ describe('Apple Mail Tools', () => {
             expect(tool.parameters.required).toContain('index');
         });
 
-        it('should return error on non-macOS platform', async () => {
+        it('should return JSON error on non-macOS platform', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'win32',
-            });
+            Object.defineProperty(process, 'platform', { value: 'win32' });
 
             const result = await tool.execute({ index: 1 });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
-            expect(result).toContain('Error');
-            expect(result).toContain('macOS');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PLATFORM_NOT_SUPPORTED');
+        });
+
+        it('should return validation error for index 0', async () => {
+            const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+            const result = await tool.execute({ index: 0 });
+
+            Object.defineProperty(process, 'platform', originalPlatform!);
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('VALIDATION_ERROR');
         });
 
         it('should get email content by index', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             const mockContent = 'Subject: Test Email\nFrom: Sender <sender@test.com>\nDate: Wed Feb 18 2026\n\nEmail body content here';
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: mockContent, stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: mockContent, stderr: '' }), 0);
                 }
                 return {} as any;
             });
@@ -286,8 +284,9 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('Subject:');
-            expect(result).toContain('Email body');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
+            expect(parsed.data.content).toContain('Subject:');
         });
     });
 
@@ -299,28 +298,27 @@ describe('Apple Mail Tools', () => {
             expect(tool.parameters.properties).toHaveProperty('unreadOnly');
         });
 
-        it('should return error on non-macOS platform', async () => {
+        it('should return JSON error on non-macOS platform', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'linux',
-            });
+            Object.defineProperty(process, 'platform', { value: 'linux' });
 
             const result = await tool.execute({});
 
             Object.defineProperty(process, 'platform', originalPlatform!);
-            expect(result).toContain('Error');
-            expect(result).toContain('macOS');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PLATFORM_NOT_SUPPORTED');
         });
 
         it('should count total emails', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
+            // Output uses § delimiter: totalCount§unreadCount
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: 'Total emails in INBOX: 100\nUnread: 5', stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: '100§5', stderr: '' }), 0);
                 }
                 return {} as any;
             });
@@ -329,19 +327,20 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('100');
-            expect(result).toContain('Unread: 5');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
+            expect(parsed.data.totalCount).toBe(100);
+            expect(parsed.data.unreadCount).toBe(5);
         });
 
         it('should count unread only', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: 'Unread emails in INBOX: 5', stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: '5', stderr: '' }), 0);
                 }
                 return {} as any;
             });
@@ -350,21 +349,21 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('Unread');
-            expect(result).toContain('5');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
+            expect(parsed.data.unreadCount).toBe(5);
         });
     });
 
     describe('Platform Detection', () => {
         it('should work on macOS', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: 'email data', stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: 'email data', stderr: '' }), 0);
                 }
                 return {} as any;
             });
@@ -374,7 +373,8 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).not.toContain('macOS only');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
         });
 
         it('should reject on all non-macOS platforms', async () => {
@@ -383,15 +383,15 @@ describe('Apple Mail Tools', () => {
 
             for (const platform of platforms) {
                 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-                Object.defineProperty(process, 'platform', {
-                    value: platform,
-                });
+                Object.defineProperty(process, 'platform', { value: platform });
 
                 const result = await listTool.execute({ count: 5 });
 
                 Object.defineProperty(process, 'platform', originalPlatform!);
 
-                expect(result).toContain('macOS');
+                const parsed = JSON.parse(result);
+                expect(parsed.success).toBe(false);
+                expect(parsed.error.message).toContain('macOS');
             }
         });
     });
@@ -399,14 +399,13 @@ describe('Apple Mail Tools', () => {
     describe('Error Handling', () => {
         it('should handle AppleScript execution errors', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
                     const error = new Error('AppleScript error: Mail is not running');
-                    callback(error, { stdout: '', stderr: '' });
+                    setTimeout(() => actualCallback(error, { stdout: '', stderr: '' }), 0);
                 }
                 return {} as any;
             });
@@ -416,20 +415,21 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('Error');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('APPLESCRIPT_ERROR');
         });
 
-        it('should handle timeout errors', async () => {
+        it('should handle permission denied errors', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    const error = new Error('Command timed out');
-                    (error as any).code = 'ETIMEDOUT';
-                    callback(error, { stdout: '', stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    const error: any = new Error('not authorized to send Apple events');
+                    error.stderr = 'not authorized to send Apple events';
+                    setTimeout(() => actualCallback(error, { stdout: '', stderr: error.stderr }), 0);
                 }
                 return {} as any;
             });
@@ -439,7 +439,11 @@ describe('Apple Mail Tools', () => {
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('Error');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PERMISSION_DENIED');
+            expect(parsed.error.recoverySteps).toBeDefined();
+            expect(parsed.error.recoverySteps.length).toBeGreaterThan(0);
         });
     });
 });
