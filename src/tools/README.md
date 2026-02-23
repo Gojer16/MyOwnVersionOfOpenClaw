@@ -113,6 +113,14 @@ Data flow: Agent request → tool lookup → Zod schema validation → safety ch
 - Side effects: Writes/cleans temp .scpt files, caches permission check results (5-min TTL)
 - Exports: `BulletproofOutput`, `formatSuccess`, `formatError`, `safeExecAppleScript`, `checkAppPermission`, `handleAppleScriptError`, `checkPlatform`, `createBaseString`, `escapeAppleScript`, `normalizeString`, `DELIMITER`
 
+**apple-safari.ts** (500+ lines)
+- What: macOS Safari browser integration with full bulletproofing
+- Why: Native Safari control — open URLs, get active tab, extract content, navigate history
+- Who calls: Agent on macOS when user asks to interact with Safari
+- What calls: apple-shared.ts utilities, safeExecAppleScript
+- Side effects: Controls Safari browser, caches permissions
+- Bulletproofing: Zod schemas for all 10 Safari tools, `BulletproofOutput` JSON responses, temp file script execution
+
 **apple-calendar.ts** (730+ lines)
 - What: macOS Calendar integration with full bulletproofing
 - Why: Native Apple Calendar management — create, list, delete events
@@ -327,7 +335,6 @@ BrowserResult: {
 **Silent failure risks:**
 - Command blocking false negative: Dangerous command not detected
 - Path traversal not caught: Relative path escapes allowed area
-- ~~AppleScript error swallowed: Failure not reported to user~~ **RESOLVED**: All Apple tools return structured `BulletproofOutput` JSON with error codes
 - Browser disconnection: Page state lost without error
 - Missing: Tool execution timeout not enforced
 
@@ -437,23 +444,33 @@ BrowserResult: {
 ## 12. Technical Debt & TODO
 
 **Weak areas:**
-- Incomplete input sanitization for shell command arguments
-- No tool usage quotas or rate limiting per user
-- Browser instance management could be more robust
+- Missing: Tool usage quotas or rate limiting per user
 - Missing: Tool execution history and audit logging
 - Missing: Tool performance monitoring and alerting
+- Missing: Dependency injection for testability
 
 **Resolved (v0.4.0):**
 - ~~AppleScript error handling is basic~~ → All Apple tools now use `BulletproofOutput` JSON with structured error codes, recovery steps, and Zod validation
 - ~~Standardize error handling patterns across all tools~~ → Apple tools standardized via `apple-shared.ts`
 - ~~Extract safety system to shared module~~ → `apple-shared.ts` provides shared infrastructure for all Apple tools
+- ~~Safari script injection vulnerability~~ → apple-safari.ts uses `safeExecAppleScript()` (temp file execution)
+- ~~Path traversal in notes~~ → Directory validation and path traversal prevention added
+- ~~Task ID collisions~~ → UUID-based task IDs implemented
+- ~~Shell zombie processes~~ → Proper timeout cleanup with SIGKILL escalation
+- ~~Browser process leaks~~ → Process exit handlers with automatic cleanup
+- ~~Regex crash in file_search~~ → Special characters now escaped
+- ~~Destructive writes in soul_update~~ → Size limits, backups, and auto-restore
+
+**Resolved (v0.4.0) - Additional Validation:**
+- All tools now have Zod schema validation for inputs
+- URL/Query validation in web.ts (http/https only)
+- Path validation in screenshot.ts (temp/home dirs only)
+- 500 task limit with auto-archiving in tasks.ts
 
 **Refactor targets:**
-- Implement proper input sanitization for all user-provided arguments (non-Apple tools)
 - Add tool usage quotas with configurable limits
-- Improve browser instance pooling and health checks
 - Add comprehensive audit logging for all tool executions
-- Missing: Dependency injection for testability
+- Add dependency injection for testability
 
 **Simplification ideas:**
 - Consolidate similar tools (multiple file operations could be one tool with action parameter)
