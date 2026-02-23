@@ -66,8 +66,8 @@ Complete reference for `~/.talon/config.json`.
     "telegram": {
       "enabled": true,
       "botToken": "${TELEGRAM_BOT_TOKEN}",
-      "allowedUsers": [],              // Empty = allow all
-      "allowedGroups": [],
+      "allowedUsers": [],              // Empty = allow all | Format: numeric user ID as string (e.g., "123456789")
+      "allowedGroups": [],             // Empty = allow all groups | Format: group ID as string (e.g., "-987654321")
       "groupActivation": "mention"     // "mention" | "always"
     },
     "discord": {
@@ -202,6 +202,33 @@ Complete reference for `~/.talon/config.json`.
 | `DISCORD_APP_ID` | Discord application ID |
 | `TALON_PASSWORD` | Password for remote access auth |
 | `TALON_TOKEN` | Bearer token for API auth |
+
+---
+
+## Channel Configuration Guide
+
+### Telegram Setup
+
+1. **Create a bot**: Message [@BotFather](https://t.me/BotFather) on Telegram and create a new bot
+2. **Get bot token**: Copy the token provided by BotFather to `.env` as `TELEGRAM_BOT_TOKEN`
+3. **Find your user ID**: Message [@userinfobot](https://t.me/userinfobot) to get your numeric ID
+4. **Configure allowedUsers**: Add your numeric ID as a string (e.g., `"123456789"`)
+   - Format: **Numeric user ID as string** — NOT usernames (e.g., use `"123456789"` NOT `"@john"`)
+   - Empty array `[]` allows all users (not recommended for production)
+5. **Group configuration** (optional):
+   - Add bot to a group
+   - Get group ID by forwarding a group message to @userinfobot
+   - Add group ID to `allowedGroups` (e.g., `"-987654321"`)
+   - Set `groupActivation`: `"mention"` (responds to @botname or /commands) or `"always"`
+
+### WhatsApp Setup
+
+1. **Install dependencies**: `npm install whatsapp-web.js qrcode-terminal`
+2. **Enable in config**: Set `channels.whatsapp.enabled: true`
+3. **Configure allowedUsers**: Add your phone number as string (e.g., `"1234567890"`)
+   - Format: Phone number without country code prefix (e.g., `"584128449024"`)
+4. **Scan QR code**: On startup, scan the QR code with WhatsApp on your phone
+5. **Session persistence**: Auth data stored in `~/.talon/whatsapp-auth/`
 
 ---
 

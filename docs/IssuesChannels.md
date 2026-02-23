@@ -266,11 +266,15 @@ eventBus.on('message.outbound', async ({ message, sessionId }) => {
   - Ignore group messages without mentions when `groupActivation: 'mention'`
 
 ### CHAN-007: Telegram `allowedUsers` compares user IDs inconsistently
-- [ ] **Severity**: 🟡 Medium | **Blocks Today?**: ✅ No
-- **File**: `src/channels/telegram/index.ts`, lines 142, 165
-- **Problem**: `userId` is derived from `msg.from?.id.toString()` (line 142) — but the config `allowedUsers` expects strings. If a user puts numeric IDs as numbers in config JSON, Zod converts them to strings, but the comparison at line 165 checks `.includes(userId)`. This may fail due to type coercion issues, or may not match if the user puts their username instead of numeric ID.
-  - Config schema (line 56): `allowedUsers: z.array(z.string()).default([])` — no guidance on format
-- **Fix**: Document clearly whether `allowedUsers` expects numeric IDs (e.g., `"123456789"`) or usernames (e.g., `"@john"`). Add validation in the channel or schema.
+- [x] ✅ **RESOLVED**
+- **Severity**: 🟡 Medium | **Blocks Today?**: ✅ No
+- **File**: `docs/07-CONFIGURATION.md`, `src/config/schema.ts`
+- **Status**: Fixed — Documentation clarifies format requirement
+- **Solution**: 
+  - Document that `allowedUsers` expects **numeric user IDs as strings** (e.g., `"123456789"`)
+  - NOT usernames (e.g., NOT `"@john"`)
+  - Users can find their ID by messaging @userinfobot on Telegram
+  - Config schema enforces string array type
 
 ### CHAN-008: Telegram polling error backoff is fixed 5s, not exponential
 - [x] ✅ **RESOLVED**
