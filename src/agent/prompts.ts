@@ -130,6 +130,7 @@ export function buildSystemPrompt(
     soul: string,
     availableTools: string[],
     workspaceRoot?: string,
+    config?: any, // TalonConfig - optional channel configuration
 ): string {
     let prompt = soul;
     
@@ -227,6 +228,24 @@ export function buildSystemPrompt(
             const userName = extractUserName(user);
             if (userName) {
                 prompt += `\n\n## First Message Greeting\nIf this is the first message in this session, greet ${userName} casually (e.g., "Hey ${userName}! Ready to crush some goals? 🚀" or "What's good, ${userName}?"). Don't ask who they are - you already know them from the files above!`;
+            }
+
+            // Add configured channels information
+            const channels: string[] = [];
+            if (config?.channels?.telegram?.enabled && config.channels.telegram.botToken) {
+                channels.push(`✅ **Telegram** - Bot configured, ${config.channels.telegram.allowedUsers?.length || 0} allowed user(s)`);
+            } else if (config?.channels?.telegram?.enabled) {
+                channels.push(`⚠️ **Telegram** - Enabled but missing bot token`);
+            }
+            if (config?.channels?.whatsapp?.enabled) {
+                channels.push(`✅ **WhatsApp** - Configured, ${config.channels.whatsapp.allowedUsers?.length || 0} allowed user(s)`);
+            }
+            if (config?.channels?.cli?.enabled) {
+                channels.push(`✅ **CLI** - Terminal interface active`);
+            }
+            
+            if (channels.length > 0) {
+                prompt += `\n\n## Configured Communication Channels\n\n${channels.join('\n')}\n\n**Important**: When users message you via these channels, your responses are AUTOMATICALLY delivered to them on the same channel. You do NOT need to use any special tool - just respond naturally and the channel system handles delivery.`;
             }
         }
     }

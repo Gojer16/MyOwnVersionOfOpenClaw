@@ -82,7 +82,8 @@ export class MemoryManager {
         const systemPrompt = buildSystemPrompt(
             soul,
             this.availableTools,
-            this.config.workspaceRoot
+            this.config.workspaceRoot,
+            this.config // Pass config for channel information
         );
         
         logger.debug({

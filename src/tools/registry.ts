@@ -18,6 +18,7 @@ import { appleCalendarTools } from './apple-calendar.js';
 import { appleSafariTools } from './apple-safari.js';
 import { appleMailTools } from './apple-mail.js';
 import { createScratchpadTool } from './scratchpad.js';
+import { createChannelStatusTool } from './channel-status.js';
 import { logger } from '../utils/logger.js';
 
 export interface ToolDefinition {
@@ -90,6 +91,13 @@ export function registerAllTools(agentLoop: AgentLoop, config: TalonConfig): voi
     const scratchpadTool = createScratchpadTool();
     agentLoop.registerTool(scratchpadTool);
     registered.push(scratchpadTool.name);
+
+    // Channel status tool (always enabled)
+    const channelStatusTools = createChannelStatusTool(config);
+    for (const tool of channelStatusTools) {
+        agentLoop.registerTool(tool);
+        registered.push(tool.name);
+    }
 
     // Apple integrations (macOS only)
     logger.debug({ platform: process.platform, isDarwin: process.platform === 'darwin' }, 'Checking platform for Apple tools');
