@@ -49,7 +49,7 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Side effects: Standardizes channel interface, enables polymorphic channel handling
 - Critical assumptions: Router and session manager are initialized, config is valid
 
-**cli/index.ts** (500+ lines)
+**cli/index.ts** (362 lines)
 - What: Command-line interface with interactive REPL
 - Why: Primary development and debugging interface for Talon
 - Who calls: Gateway during channel initialization
@@ -57,7 +57,7 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Side effects: Creates TTY interface, handles Ctrl+C, manages CLI session
 - Critical assumptions: Running in TTY environment, terminal supports ANSI codes
 
-**cli/commands.ts** (300+ lines)
+**cli/commands.ts** (555 lines)
 - What: Slash command system (/help, /status, /config, etc.)
 - Why: Provides administrative and utility commands within CLI
 - Who calls: CLI channel when user types slash commands
@@ -65,7 +65,7 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Side effects: Executes commands, changes settings, displays information
 - Critical assumptions: Commands are properly registered, context available
 
-**cli/renderer.ts** (200+ lines)
+**cli/renderer.ts** (411 lines)
 - What: Terminal output rendering with streaming and formatting
 - Why: Handles all display logic (agent responses, tool usage, streaming)
 - Who calls: CLI channel for all output operations
@@ -73,7 +73,7 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Side effects: Renders to stdout, manages cursor position, handles line wrapping
 - Critical assumptions: Terminal supports UTF-8, proper width detection
 
-**cli/skill-commands.ts** (150+ lines)
+**cli/skill-commands.ts** (229 lines)
 - What: Skill command registration system
 - Why: Extensible command system for skills (time, echo, calc, etc.)
 - Who calls: CLI command system during initialization
@@ -81,7 +81,7 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Side effects: Registers skill commands, extends CLI functionality
 - Critical assumptions: Skills are properly implemented, command names unique
 
-**cli/utils.ts** (100+ lines)
+**cli/utils.ts** (224 lines)
 - What: CLI utility functions (formatting, parsing, helpers)
 - Why: Shared utilities for CLI channel components
 - Who calls: Various CLI components as needed
@@ -89,7 +89,7 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Side effects: Formatting operations, input parsing
 - Critical assumptions: Utility functions are pure/side-effect free
 
-**cli/markdown.ts** (80+ lines)
+**cli/markdown.ts** (233 lines)
 - What: Markdown to terminal formatting conversion
 - Why: Converts agent markdown responses to terminal-friendly format
 - Who calls: Terminal renderer when displaying agent responses
@@ -97,7 +97,7 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Side effects: Strips/transforms markdown for terminal display
 - Critical assumptions: Markdown is well-formed, terminal supports basic ANSI
 
-**telegram/index.ts** (200+ lines)
+**telegram/index.ts** (228 lines)
 - What: Telegram bot integration via long-polling
 - Why: Enables Talon access via Telegram messaging
 - Who calls: Gateway during channel initialization
@@ -105,7 +105,7 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Side effects: Polls Telegram API, sends/receives messages, manages offset
 - Critical assumptions: Bot token valid, network accessible, API rate limits respected
 
-**whatsapp/index.ts** (300+ lines)
+**whatsapp/index.ts** (337 lines)
 - What: WhatsApp Web integration via whatsapp-web.js
 - Why: Enables Talon access via WhatsApp messaging
 - Who calls: Gateway during channel initialization

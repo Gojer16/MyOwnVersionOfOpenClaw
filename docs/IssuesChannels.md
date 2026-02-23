@@ -313,28 +313,37 @@ eventBus.on('message.outbound', async ({ message, sessionId }) => {
 ## 3. README Inaccuracies
 
 ### CHAN-011: Line counts are wrong for most files
-- [ ] **Severity**: 🟢 Low
+- [x] ✅ **RESOLVED**
+- **Severity**: 🟢 Low
 - **File**: `src/channels/README.md`, Section 4
+- **Status**: Fixed — All line counts updated to match reality
 
-| README Claim | Actual Lines | File |
-|---|---|---|
-| `base.ts` "72 lines" | 73 lines | ✅ Close enough |
-| `cli/index.ts` "500+ lines" | ~347 lines (12,340 bytes) | ❌ Inflated |
-| `cli/commands.ts` "300+ lines" | ~530 lines (18,844 bytes) | ❌ Deflated |
-| `cli/renderer.ts` "200+ lines" | ~470 lines (16,797 bytes) | ❌ Deflated |
-| `cli/skill-commands.ts` "150+ lines" | ~200 lines (7,363 bytes) | ❌ Deflated |
-| `cli/utils.ts` "100+ lines" | ~190 lines (6,872 bytes) | ❌ Deflated |
-| `cli/markdown.ts` "80+ lines" | ~230 lines (8,394 bytes) | ❌ Deflated |
-| `telegram/index.ts` "200+ lines" | 201 lines | ✅ Correct |
-| `whatsapp/index.ts` "300+ lines" | 270 lines | ❌ Inflated |
-
-- **Fix**: Update all line counts to match reality.
+| File | README Claim | Actual Lines | Status |
+|------|--------------|--------------|--------|
+| `base.ts` | 72 lines | 72 lines | ✅ |
+| `cli/index.ts` | 500+ lines | 362 lines | ✅ Fixed |
+| `cli/commands.ts` | 300+ lines | 555 lines | ✅ Fixed |
+| `cli/renderer.ts` | 200+ lines | 411 lines | ✅ Fixed |
+| `cli/skill-commands.ts` | 150+ lines | 229 lines | ✅ Fixed |
+| `cli/utils.ts` | 100+ lines | 224 lines | ✅ Fixed |
+| `cli/markdown.ts` | 80+ lines | 233 lines | ✅ Fixed |
+| `telegram/index.ts` | 200+ lines | 228 lines | ✅ Fixed |
+| `whatsapp/index.ts` | 300+ lines | 337 lines | ✅ Fixed |
 
 ### CHAN-012: Sub-READMEs are auto-generated placeholders
-- [ ] **Severity**: 🟡 Medium
+- [x] ✅ **RESOLVED**
+- **Severity**: 🟡 Medium
 - **Files**: `src/channels/telegram/README.md`, `src/channels/whatsapp/README.md`
-- **Problem**: Both files are auto-generated templates with `[Brief description]`, `[Add important technical constraints]`, `[ClassNameOrFunction]` placeholders. They provide zero useful information.
-- **Fix**: Fill in with actual module documentation — exported classes, required env vars, config format, common errors, dependencies.
+- **Status**: Fixed — Both files now have complete documentation including:
+  - Overview and features
+  - Configuration reference with field descriptions
+  - Environment variables
+  - Public API documentation
+  - Technical details (message flow, rate limits)
+  - Error handling tables
+  - Fixed issues list
+  - Troubleshooting guide
+  - Related documentation links
 
 ### CHAN-013: README claims Zod schemas exist for messages but they don't
 - [ ] **Severity**: 🟡 Medium
