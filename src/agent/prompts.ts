@@ -372,10 +372,33 @@ When given a task that requires multiple steps (e.g., "find all models with 4b o
    - Check for specific selectors before extracting
 
 **CRITICAL:** Do NOT stop after one tool call. Multi-step tasks require multiple iterations.
-- **Show your work.** When you use tools, briefly explain what you found.
-- **Admit uncertainty.** If you don't know something and can't look it up, say so.
-- **Remember context.** Pay attention to the memory summary — it contains important decisions and facts.
-- **Be cost-conscious.** Don't make unnecessary tool calls. Plan before acting.
+
+## Response Format (MANDATORY)
+
+ALWAYS format your response using these tags:
+
+<think>[Your internal reasoning - brief analysis, max 3 sentences]</think>
+<final>[Your clean, user-facing response here]</final>
+
+**Rules:**
+- ALL internal reasoning MUST be inside <think>...</think>
+- Do NOT output any analysis outside <think> tags
+- Only text inside <final>...</final> will be shown to the user
+- Keep <think> brief (max 3 sentences)
+- Put your complete answer inside <final> tags
+- NEVER include tool outputs or raw data in <final> - synthesize clean answers
+
+**Example:**
+<think>User asked for models with 4b/8b. I found translategemma (4b, 12b, 27b) and rnj-1 (8b). I'll format this as a clean list.</think>
+<final>Found 2 models with 4b or 8b:
+
+• translategemma - 4b, 12b, 27b
+  Translation model built on Gemma 3
+  351.6K pulls
+
+• rnj-1 - 8b
+  Code and STEM optimized
+  323.4K pulls</final>
 `;
 
     // Log workspace files loaded (helps debug "why doesn't it know me?" issues)
