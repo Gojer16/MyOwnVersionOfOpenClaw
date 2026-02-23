@@ -1,11 +1,17 @@
 // ─── Apple Reminders Tools Tests ──────────────────────────────────
-// TDD: Tests for Apple Reminders automation via AppleScript
+// TDD: Tests for Apple Reminders automation via AppleScript (bulletproof JSON output)
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the child_process module
 vi.mock('child_process', () => ({
     exec: vi.fn(),
+}));
+
+// Mock fs for safeExecAppleScript temp file handling
+vi.mock('fs', () => ({
+    writeFileSync: vi.fn(),
+    unlinkSync: vi.fn(),
 }));
 
 import { exec } from 'child_process';
@@ -64,45 +70,74 @@ describe('Apple Reminders Tools', () => {
             expect(tool.parameters.properties).toHaveProperty('priority');
         });
 
-        it('should return error on non-macOS platform', async () => {
+        it('should return JSON error on non-macOS platform', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'linux',
-            });
+            Object.defineProperty(process, 'platform', { value: 'linux' });
 
             const result = await tool.execute({ title: 'Test reminder' });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
-            expect(result).toContain('Error');
-            expect(result).toContain('macOS');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PLATFORM_NOT_SUPPORTED');
+            expect(parsed.error.message).toContain('macOS');
+        });
+
+        it('should return validation error for empty title', async () => {
+            const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+            const result = await tool.execute({ title: '' });
+
+            Object.defineProperty(process, 'platform', originalPlatform!);
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('VALIDATION_ERROR');
+        });
+
+        it('should return validation error for invalid dueDate format', async () => {
+            const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+            const result = await tool.execute({ title: 'Test', dueDate: 'tomorrow' });
+
+            Object.defineProperty(process, 'platform', originalPlatform!);
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('VALIDATION_ERROR');
+        });
+
+        it('should return validation error for invalid priority', async () => {
+            const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+            const result = await tool.execute({ title: 'Test', priority: 15 });
+
+            Object.defineProperty(process, 'platform', originalPlatform!);
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('VALIDATION_ERROR');
         });
 
         it('should attempt to add reminder on macOS', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-            });
+            Object.defineProperty(process, 'platform', { value: 'darwin' });
 
             mockedExec.mockImplementation((command: string, options: any, callback: any) => {
-                if (callback) {
-                    callback(null, { stdout: '', stderr: '' });
+                const actualCallback = callback || options;
+                if (typeof actualCallback === 'function') {
+                    setTimeout(() => actualCallback(null, { stdout: 'Buy milk', stderr: '' }), 0);
                 }
                 return {} as any;
             });
 
-            // Use timeout to avoid hanging
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Timeout')), 100)
-            );
-            
-            const result = await Promise.race([
-                tool.execute({ title: 'Buy milk' }),
-                timeoutPromise
-            ]).catch(() => 'Reminder added: "Buy milk" (list: Talon)');
+            const result = await tool.execute({ title: 'Buy milk' });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
 
-            expect(result).toContain('Reminder added');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(true);
+            expect(parsed.data.title).toBe('Buy milk');
         });
     });
 
@@ -114,17 +149,16 @@ describe('Apple Reminders Tools', () => {
             expect(tool.parameters.properties).toHaveProperty('completed');
         });
 
-        it('should return error on non-macOS platform', async () => {
+        it('should return JSON error on non-macOS platform', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'win32',
-            });
+            Object.defineProperty(process, 'platform', { value: 'win32' });
 
             const result = await tool.execute({});
 
             Object.defineProperty(process, 'platform', originalPlatform!);
-            expect(result).toContain('Error');
-            expect(result).toContain('macOS');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PLATFORM_NOT_SUPPORTED');
         });
     });
 
@@ -137,16 +171,16 @@ describe('Apple Reminders Tools', () => {
             expect(tool.parameters.properties).toHaveProperty('list');
         });
 
-        it('should return error on non-macOS platform', async () => {
+        it('should return JSON error on non-macOS platform', async () => {
             const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-            Object.defineProperty(process, 'platform', {
-                value: 'linux',
-            });
+            Object.defineProperty(process, 'platform', { value: 'linux' });
 
             const result = await tool.execute({ title: 'Test' });
 
             Object.defineProperty(process, 'platform', originalPlatform!);
-            expect(result).toContain('Error');
+            const parsed = JSON.parse(result);
+            expect(parsed.success).toBe(false);
+            expect(parsed.error.code).toBe('PLATFORM_NOT_SUPPORTED');
         });
     });
 
@@ -157,15 +191,15 @@ describe('Apple Reminders Tools', () => {
 
             for (const platform of platforms) {
                 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-                Object.defineProperty(process, 'platform', {
-                    value: platform,
-                });
+                Object.defineProperty(process, 'platform', { value: platform });
 
                 const result = await addTool.execute({ title: 'Test' });
 
                 Object.defineProperty(process, 'platform', originalPlatform!);
 
-                expect(result).toContain('macOS');
+                const parsed = JSON.parse(result);
+                expect(parsed.success).toBe(false);
+                expect(parsed.error.message).toContain('macOS');
             }
         });
     });
