@@ -1,12 +1,53 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+// ─── Safari Integration with Full Bulletproofing ─────────────────────────────
+// macOS Safari browser automation using AppleScript
+// All tools return structured BulletproofOutput JSON with Zod validation
+
+import { z } from 'zod';
 import { logger } from '../utils/logger.js';
+import {
+    BulletproofOutput,
+    formatSuccess,
+    formatError,
+    safeExecAppleScript,
+    checkPlatform,
+    checkAppPermission,
+    handleAppleScriptError,
+    escapeAppleScript,
+} from './apple-shared.js';
 
-const execAsync = promisify(exec);
+// ─── Zod Schemas ──────────────────────────────────────────────
 
-function escapeAppleScript(str: string): string {
-    return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
-}
+const NavigateSchema = z.object({
+    url: z.string().trim().min(1, "URL cannot be empty").max(2048, "URL too long (max 2048 chars)"),
+    newTab: z.boolean().optional().default(true),
+});
+
+const ExtractSchema = z.object({
+    selector: z.string().trim().max(500, "Selector too long").optional(),
+    maxLength: z.number().int().min(1).max(50000).optional().default(5000),
+});
+
+const ExecuteJSSchema = z.object({
+    script: z.string().trim().min(1, "Script cannot be empty").max(10000, "Script too long"),
+    waitMs: z.number().int().min(0).max(30000).optional().default(0),
+});
+
+const ClickSchema = z.object({
+    selector: z.string().trim().min(1, "Selector cannot be empty").max(500, "Selector too long"),
+});
+
+const TypeSchema = z.object({
+    selector: z.string().trim().min(1, "Selector cannot be empty").max(500, "Selector too long"),
+    text: z.string().min(1, "Text cannot be empty").max(5000, "Text too long"),
+    submit: z.boolean().optional().default(false),
+});
+
+const ActivateTabSchema = z.object({
+    windowIndex: z.number().int().min(1).optional().default(1),
+    tabIndex: z.number().int().min(1, "Tab index must be at least 1"),
+});
+
+// ─── Tool Definitions ─────────────────────────────────────────
 
 export const appleSafariTools = [
     {
@@ -21,37 +62,76 @@ export const appleSafariTools = [
             required: ['url'],
         },
         async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Validate inputs
+            let url: string;
+            let newTab: boolean;
+            try {
+                const parsed = NavigateSchema.parse(args);
+                url = parsed.url;
+                newTab = parsed.newTab;
+            } catch (error: any) {
+                return formatError(
+                    'VALIDATION_ERROR',
+                    error.errors?.[0]?.message || 'Invalid parameters',
+                    false,
+                    { receivedArgs: args },
+                    startTime
+                );
             }
 
-            const url = escapeAppleScript(args.url as string);
-            const newTab = args.newTab !== false; // Default to true
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
+            }
 
             try {
+                let script: string;
                 if (newTab) {
-                    const script = `tell application "Safari"
+                    script = `tell application "Safari"
     if not running then launch
     activate
     tell front window
-        set current tab to (make new tab with properties {URL:"${url}"})
+        set current tab to (make new tab with properties {URL:"${escapeAppleScript(url)}"})
     end tell
 end tell`;
-                    await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
                 } else {
-                    const script = `tell application "Safari"
+                    script = `tell application "Safari"
     if not running then launch
     activate
-    set URL of current tab of front window to "${url}"
+    set URL of current tab of front window to "${escapeAppleScript(url)}"
 end tell`;
-                    await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
                 }
-                
+
+                await safeExecAppleScript(script, 30000);
                 logger.info({ url, newTab }, 'Safari navigation successful');
-                return `Navigated to ${args.url} in Safari`;
-            } catch (error) {
-                logger.error({ error, url }, 'Failed to navigate in Safari');
-                return `Error: ${(error as Error).message}`;
+
+                return formatSuccess(
+                    { url, newTab, message: `Navigated to ${url} in Safari` },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', { url, newTab }, startTime);
             }
         },
     },
@@ -63,8 +143,29 @@ end tell`;
             properties: {},
         },
         async execute(): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
             }
 
             const script = `tell application "Safari"
@@ -72,16 +173,22 @@ end tell`;
     tell front document
         set pageTitle to name
         set pageURL to URL
-        return "Title: " & pageTitle & "\nURL: " & pageURL
+        return "Title: " & pageTitle & "\\nURL: " & pageURL
     end tell
 end tell`;
 
             try {
-                const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 10000 });
-                return stdout.trim();
-            } catch (error) {
-                logger.error({ error }, 'Failed to get Safari page info');
-                return `Error: ${(error as Error).message}`;
+                const { stdout } = await safeExecAppleScript(script, 10000);
+                const result = stdout.trim();
+                logger.info({ result }, 'Safari page info retrieved');
+
+                return formatSuccess(
+                    { rawOutput: result },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', {}, startTime);
             }
         },
     },
@@ -96,41 +203,84 @@ end tell`;
             },
         },
         async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Validate inputs
+            let selector: string | undefined;
+            let maxLength: number;
+            try {
+                const parsed = ExtractSchema.parse(args);
+                selector = parsed.selector;
+                maxLength = parsed.maxLength;
+            } catch (error: any) {
+                return formatError(
+                    'VALIDATION_ERROR',
+                    error.errors?.[0]?.message || 'Invalid parameters',
+                    false,
+                    { receivedArgs: args },
+                    startTime
+                );
             }
 
-            const selector = args.selector as string | undefined;
-            const maxLength = (args.maxLength as number) || 5000;
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
+            }
 
             try {
                 // Build JavaScript code to execute
                 let jsLogic: string;
                 if (selector) {
-                    jsLogic = `const el = document.querySelector('${selector.replace(/'/g, "\\'")}'); if (!el) return 'Element not found'; return el.innerText || el.textContent || ''`;
+                    // Escape selector for JavaScript
+                    const escapedSelector = selector.replace(/'/g, "\\'");
+                    jsLogic = `const el = document.querySelector('${escapedSelector}'); if (!el) return 'Element not found'; return el.innerText || el.textContent || ''`;
                 } else {
                     jsLogic = `return document.body.innerText || document.body.textContent || ''`;
                 }
-                
+
                 // Wrap in IIFE
                 const jsCode = `(function() { ${jsLogic} })()`;
-                
-                // Build AppleScript - properly escape for shell execution
-                const script = `tell application "Safari" to tell front document to do JavaScript "${jsCode.replace(/"/g, '\\"').replace(/\\/g, '\\\\')}"`;
-                
-                const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
+
+                const script = `tell application "Safari"
+    tell front document
+        do JavaScript "${escapeAppleScript(jsCode)}"
+    end tell
+end tell`;
+
+                const { stdout } = await safeExecAppleScript(script, 30000);
                 let content = stdout.trim();
-                
+
                 // Truncate if too long
                 if (content.length > maxLength) {
-                    content = content.substring(0, maxLength) + '\n... (truncated)';
+                    content = content.substring(0, maxLength) + '\\n... (truncated)';
                 }
-                
+
                 logger.info({ selector, contentLength: content.length }, 'Safari content extracted');
-                return content || 'No text content found on the page';
-            } catch (error) {
-                logger.error({ error, selector }, 'Failed to extract content from Safari');
-                return `Error: ${(error as Error).message}`;
+                return formatSuccess(
+                    { content, selector, length: content.length },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', { selector }, startTime);
             }
         },
     },
@@ -146,36 +296,71 @@ end tell`;
             required: ['script'],
         },
         async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Validate inputs
+            let userScript: string;
+            let waitMs: number;
+            try {
+                const parsed = ExecuteJSSchema.parse(args);
+                userScript = parsed.script;
+                waitMs = parsed.waitMs;
+            } catch (error: any) {
+                return formatError(
+                    'VALIDATION_ERROR',
+                    error.errors?.[0]?.message || 'Invalid parameters',
+                    false,
+                    { receivedArgs: args },
+                    startTime
+                );
             }
 
-            const userScript = args.script as string;
-            const waitMs = (args.waitMs as number) || 0;
-            
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
+            }
+
             // Wait if requested (for client-side rendering)
             if (waitMs > 0) {
                 await new Promise(resolve => setTimeout(resolve, waitMs));
             }
-            
-            // Use heredoc to avoid shell escaping issues with complex JavaScript
-            const escapedScript = userScript.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            const script = `osascript <<'EOF'
-tell application "Safari"
+
+            const script = `tell application "Safari"
     tell front document
-        do JavaScript "${escapedScript}"
+        do JavaScript "${escapeAppleScript(userScript)}"
     end tell
-end tell
-EOF`;
+end tell`;
 
             try {
-                const { stdout } = await execAsync(script, { timeout: 30000, shell: '/bin/bash' });
+                const { stdout } = await safeExecAppleScript(script, 30000);
                 const result = stdout.trim();
                 logger.info({ scriptLength: userScript.length }, 'JavaScript executed in Safari');
-                return result || 'JavaScript executed successfully (no return value)';
-            } catch (error) {
-                logger.error({ error }, 'Failed to execute JavaScript in Safari');
-                return `Error: ${(error as Error).message}`;
+
+                return formatSuccess(
+                    { result, scriptLength: userScript.length },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', { scriptLength: userScript.length }, startTime);
             }
         },
     },
@@ -190,15 +375,49 @@ EOF`;
             required: ['selector'],
         },
         async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Validate inputs
+            let selector: string;
+            try {
+                const parsed = ClickSchema.parse(args);
+                selector = parsed.selector;
+            } catch (error: any) {
+                return formatError(
+                    'VALIDATION_ERROR',
+                    error.errors?.[0]?.message || 'Invalid parameters',
+                    false,
+                    { receivedArgs: args },
+                    startTime
+                );
             }
 
-            const selector = escapeAppleScript(args.selector as string);
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
+            }
 
             const jsCode = `(() => {
-                const el = document.querySelector('${selector}');
-                if (!el) return 'Element not found: ${selector}';
+                const el = document.querySelector('${selector.replace(/'/g, "\\'")}');
+                if (!el) return 'Element not found: ${selector.replace(/'/g, "\\'")}';
                 el.click();
                 return 'Clicked element: ' + (el.textContent || el.id || el.className || '${selector}').substring(0, 50);
             })()`;
@@ -210,13 +429,17 @@ EOF`;
 end tell`;
 
             try {
-                const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
+                const { stdout } = await safeExecAppleScript(script, 30000);
                 const result = stdout.trim();
                 logger.info({ selector, result }, 'Element clicked in Safari');
-                return result;
-            } catch (error) {
-                logger.error({ error, selector }, 'Failed to click element in Safari');
-                return `Error: ${(error as Error).message}`;
+
+                return formatSuccess(
+                    { result, selector },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', { selector }, startTime);
             }
         },
     },
@@ -233,23 +456,62 @@ end tell`;
             required: ['selector', 'text'],
         },
         async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Validate inputs
+            let selector: string;
+            let text: string;
+            let submit: boolean;
+            try {
+                const parsed = TypeSchema.parse(args);
+                selector = parsed.selector;
+                text = parsed.text;
+                submit = parsed.submit;
+            } catch (error: any) {
+                return formatError(
+                    'VALIDATION_ERROR',
+                    error.errors?.[0]?.message || 'Invalid parameters',
+                    false,
+                    { receivedArgs: args },
+                    startTime
+                );
             }
 
-            const selector = escapeAppleScript(args.selector as string);
-            const text = escapeAppleScript(args.text as string);
-            const submit = args.submit === true;
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
+            }
+
+            const escapedSelector = selector.replace(/'/g, "\\'");
+            const escapedText = text.replace(/'/g, "\\'");
 
             const jsCode = `(() => {
-                const el = document.querySelector('${selector}');
-                if (!el) return 'Element not found: ${selector}';
+                const el = document.querySelector('${escapedSelector}');
+                if (!el) return 'Element not found: ${escapedSelector}';
                 el.focus();
-                el.value = '${text}';
+                el.value = '${escapedText}';
                 el.dispatchEvent(new Event('input', { bubbles: true }));
                 el.dispatchEvent(new Event('change', { bubbles: true }));
-                ${submit ? `if (el.form) el.form.submit();` : ''}
-                return 'Typed "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}" into ' + (el.placeholder || el.name || el.id || '${selector}');
+                ${submit ? 'if (el.form) el.form.submit();' : ''}
+                return 'Typed "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}" into ' + (el.placeholder || el.name || el.id || '${escapedSelector}');
             })()`;
 
             const script = `tell application "Safari"
@@ -259,13 +521,17 @@ end tell`;
 end tell`;
 
             try {
-                const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
+                const { stdout } = await safeExecAppleScript(script, 30000);
                 const result = stdout.trim();
-                logger.info({ selector, textLength: (args.text as string).length }, 'Text typed into Safari field');
-                return result;
-            } catch (error) {
-                logger.error({ error, selector }, 'Failed to type into Safari field');
-                return `Error: ${(error as Error).message}`;
+                logger.info({ selector, textLength: text.length }, 'Text typed into Safari field');
+
+                return formatSuccess(
+                    { result, selector, textLength: text.length },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', { selector, textLength: text.length }, startTime);
             }
         },
     },
@@ -277,8 +543,29 @@ end tell`;
             properties: {},
         },
         async execute(): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
             }
 
             const script = `tell application "Safari"
@@ -288,12 +575,15 @@ end tell`;
 end tell`;
 
             try {
-                await execAsync(`osascript -e '${script}'`, { timeout: 10000 });
+                await safeExecAppleScript(script, 10000);
                 logger.info('Navigated back in Safari');
-                return 'Navigated back in Safari';
-            } catch (error) {
-                logger.error({ error }, 'Failed to navigate back in Safari');
-                return `Error: ${(error as Error).message}`;
+                return formatSuccess(
+                    { message: 'Navigated back in Safari' },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', {}, startTime);
             }
         },
     },
@@ -305,8 +595,29 @@ end tell`;
             properties: {},
         },
         async execute(): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
             }
 
             const script = `tell application "Safari"
@@ -316,12 +627,15 @@ end tell`;
 end tell`;
 
             try {
-                await execAsync(`osascript -e '${script}'`, { timeout: 30000 });
+                await safeExecAppleScript(script, 30000);
                 logger.info('Reloaded Safari page');
-                return 'Reloaded Safari page';
-            } catch (error) {
-                logger.error({ error }, 'Failed to reload Safari page');
-                return `Error: ${(error as Error).message}`;
+                return formatSuccess(
+                    { message: 'Reloaded Safari page' },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', {}, startTime);
             }
         },
     },
@@ -333,8 +647,29 @@ end tell`;
             properties: {},
         },
         async execute(): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
             }
 
             const script = `tell application "Safari"
@@ -359,13 +694,18 @@ end tell`;
 end tell`;
 
             try {
-                const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 10000 });
+                const { stdout } = await safeExecAppleScript(script, 10000);
                 const result = stdout.trim();
-                logger.info({ tabCount: result.split('\n').length }, 'Listed Safari tabs');
-                return result || 'No tabs found';
-            } catch (error) {
-                logger.error({ error }, 'Failed to list Safari tabs');
-                return `Error: ${(error as Error).message}`;
+                const tabCount = result === 'No tabs found' ? 0 : result.split('\\n').length;
+                logger.info({ tabCount }, 'Listed Safari tabs');
+
+                return formatSuccess(
+                    { rawOutput: result, tabCount },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', {}, startTime);
             }
         },
     },
@@ -381,12 +721,47 @@ end tell`;
             required: ['tabIndex'],
         },
         async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Safari automation is only available on macOS';
+            const startTime = Date.now();
+
+            // Platform check
+            const platformError = checkPlatform('Safari', startTime);
+            if (platformError) return platformError;
+
+            // Validate inputs
+            let windowIndex: number;
+            let tabIndex: number;
+            try {
+                const parsed = ActivateTabSchema.parse(args);
+                windowIndex = parsed.windowIndex;
+                tabIndex = parsed.tabIndex;
+            } catch (error: any) {
+                return formatError(
+                    'VALIDATION_ERROR',
+                    error.errors?.[0]?.message || 'Invalid parameters',
+                    false,
+                    { receivedArgs: args },
+                    startTime
+                );
             }
 
-            const windowIndex = (args.windowIndex as number) || 1;
-            const tabIndex = args.tabIndex as number;
+            // Check Safari permission
+            const { granted: permissionGranted } = await checkAppPermission('Safari', 'tell application "Safari" to name of front document');
+            if (!permissionGranted) {
+                return formatError(
+                    'PERMISSION_DENIED',
+                    'Terminal does not have permission to control Safari',
+                    true,
+                    {},
+                    startTime,
+                    [
+                        'Open System Settings',
+                        'Go to Privacy & Security → Automation',
+                        'Find Terminal (or your terminal app)',
+                        'Enable the Safari checkbox',
+                        'Restart your terminal and try again',
+                    ]
+                );
+            }
 
             const script = `tell application "Safari"
     if not running then return "Safari is not running"
@@ -401,13 +776,17 @@ end tell`;
 end tell`;
 
             try {
-                const { stdout } = await execAsync(`osascript -e '${script}'`, { timeout: 10000 });
+                const { stdout } = await safeExecAppleScript(script, 10000);
                 const result = stdout.trim();
                 logger.info({ windowIndex, tabIndex }, 'Activated Safari tab');
-                return result;
-            } catch (error) {
-                logger.error({ error, windowIndex, tabIndex }, 'Failed to activate Safari tab');
-                return `Error: ${(error as Error).message}`;
+
+                return formatSuccess(
+                    { result, windowIndex, tabIndex },
+                    {},
+                    startTime
+                );
+            } catch (error: any) {
+                return handleAppleScriptError(error, 'Safari', { windowIndex, tabIndex }, startTime);
             }
         },
     },
