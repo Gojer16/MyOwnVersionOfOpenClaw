@@ -43,13 +43,15 @@
       "enabled": false,
       "botToken": "${TELEGRAM_BOT_TOKEN}",
       "allowedUsers": [],
+      "allowedGroups": [],
       "groupActivation": "mention"
     },
     "whatsapp": {
       "enabled": false,
       "allowedUsers": ["${WHATSAPP_PHONE_NUMBER}"],
       "allowedGroups": [],
-      "groupActivation": "mention"
+      "groupActivation": "mention",
+      "sessionName": "Talon"
     }
   },
 
