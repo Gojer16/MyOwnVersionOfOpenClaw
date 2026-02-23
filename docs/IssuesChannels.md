@@ -346,38 +346,39 @@ eventBus.on('message.outbound', async ({ message, sessionId }) => {
   - Related documentation links
 
 ### CHAN-013: README claims Zod schemas exist for messages but they don't
-- [ ] **Severity**: 🟡 Medium
-- **File**: `src/channels/README.md`, lines 197-202
-- **Problem**: Section 7 lists:
-  - `ChannelConfigSchema`: ✅ Exists in `src/config/schema.ts`
-  - `InboundMessageSchema`: ❌ Does NOT exist — `InboundMessage` is a plain TypeScript interface in `src/utils/types.ts`
-  - `OutboundMessageSchema`: ❌ Does NOT exist
-  - `CommandSchema`: ❌ Does NOT exist
-  - `PlatformMessageSchema`: ❌ Does NOT exist
-- **Fix**: Either create these Zod schemas for runtime validation, or update the README to say they're TypeScript interfaces only.
+- [x] ✅ **RESOLVED**
+- **Severity**: 🟡 Medium
+- **File**: `src/channels/README.md`, Section 7
+- **Status**: Fixed — README now accurately documents which schemas exist
+- **Solution**: 
+  - Clarified that only `ChannelConfigSchema` is a Zod schema
+  - Marked `InboundMessage`, `OutboundMessage`, `CommandInput` as TypeScript interfaces only
+  - Added "Missing" note for runtime message validation schemas
 
 ### CHAN-014: README claims message deduplication but there is none
-- [ ] **Severity**: 🟡 Medium
+- [x] ✅ **RESOLVED**
+- **Severity**: 🟡 Medium
 - **File**: `src/channels/README.md`, line 152
-- **Problem**: "Message ingestion: Idempotent with message ID deduplication" — this is FALSE. Neither Telegram nor WhatsApp track processed message IDs. If Telegram's polling returns the same message twice (network retry), it will be processed twice.
-  - Telegram does track `offset` (line 122) which prevents re-fetching, but if the process crashes and restarts without persisting the offset, messages could be reprocessed.
-- **Fix**: Either implement actual deduplication (message ID cache) or correct the README.
+- **Status**: Fixed — README now accurately states deduplication is missing
+- **Solution**: 
+  - Updated to: "Message ingestion: NOT idempotent — Telegram tracks offset but doesn't persist; WhatsApp has no deduplication"
+  - Added "Missing: Message ID deduplication cache for true idempotency"
 
 ### CHAN-015: README claims input validation/sanitization exists but it doesn't
-- [ ] **Severity**: 🟡 Medium
-- **File**: `src/channels/README.md`, line 177, 186
-- **Problem**: 
-  - Line 177: "Input validation: Sanitize user input before processing" — FALSE. No input sanitization occurs in any channel.
-  - Line 186: "Missing: Input sanitization for injection prevention" — correctly identifies it's missing, but contradicts line 177.
-- **Fix**: Remove the incorrect claim from line 177, keep the "Missing" note in line 186.
+- [x] ✅ **RESOLVED**
+- **Severity**: 🟡 Medium
+- **File**: `src/channels/README.md`, lines 177, 186
+- **Status**: Fixed — Removed false claim, kept accurate "Missing" note
+- **Solution**: 
+  - Removed "Input validation: Sanitize user input before processing" claim
+  - Kept "Missing: Input sanitization for injection prevention" note
+  - Added ✅ checkmarks to implemented guardrails for clarity
 
 ### CHAN-016: Discord channel documented in config schema but not implemented
 - [ ] **Severity**: 🟢 Low
 - **Files**: `src/config/schema.ts` lines 61-68, `src/channels/README.md`
-- **Problem**: `DiscordChannelSchema` exists in the config schema with `botToken`, `applicationId`, `allowedGuilds`, etc. — but there is no `src/channels/discord/` directory or implementation. The gateway status page (`src/gateway/server.ts` line 236) reports Discord status even though it doesn't exist.
-- **Fix**: Either:
-  - **(A)** Create a Discord channel implementation
-  - **(B)** Mark it as `[PLANNED]` in the README and add a comment in the schema
+- **Status**: Documented as planned feature
+- **Note**: Discord channel schema exists for future implementation. Mark as `[PLANNED]` in documentation.
 
 ---
 

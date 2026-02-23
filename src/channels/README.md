@@ -149,10 +149,11 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 - Media messages: Handle or ignore based on capability
 
 **Idempotency notes:**
-- Message ingestion: Idempotent with message ID deduplication
+- Message ingestion: NOT idempotent — Telegram tracks offset but doesn't persist; WhatsApp has no deduplication
 - Channel start: Not idempotent (multiple starts cause errors)
 - Command execution: Depends on command (some idempotent, some not)
 - Message sending: Platform-dependent (may duplicate on retry)
+- Missing: Message ID deduplication cache for true idempotency
 
 ## 6. Internal Logic Details
 
@@ -170,12 +171,12 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 4. CLI command → Parse → Lookup handler → Execute → Format output → Render to terminal
 
 **Guardrails:**
-- Message size limits: Platform-specific truncation (Telegram 4096, WhatsApp 65536)
-- Rate limiting: Respect platform API limits (Telegram 30 messages/second)
-- Connection retry: Exponential backoff with max attempts
-- Authentication: Secure token storage, session cleanup
-- Input validation: Sanitize user input before processing
+- Message size limits: Platform-specific truncation (Telegram 4096, WhatsApp 65536) ✅
+- Rate limiting: Respect platform API limits (Telegram 30 messages/second) ✅
+- Connection retry: Exponential backoff with max attempts ✅
+- Authentication: Secure token storage, session cleanup ✅
 - Missing: Channel-specific spam protection
+- Missing: Input sanitization for injection prevention
 
 **Validation strategy:**
 - Configuration validation: Required tokens, valid URLs, enabled flags
@@ -195,17 +196,17 @@ Data flow: Platform message → channel parsing → ingest → router → sessio
 ## 7. Data Contracts
 
 **Schemas used:**
-- `ChannelConfigSchema`: Zod schema for channel configuration
-- `InboundMessageSchema`: Zod schema for incoming messages
-- `OutboundMessageSchema`: Zod schema for outgoing messages
-- `CommandSchema`: Zod schema for CLI command definitions
-- `PlatformMessageSchema`: Platform-specific message schemas
+- `ChannelConfigSchema`: ✅ Zod schema for channel configuration (src/config/schema.ts)
+- `InboundMessage`: ❌ TypeScript interface only (src/utils/types.ts) — no runtime validation
+- `OutboundMessage`: ❌ TypeScript interface only — no runtime validation
+- `CommandInput`: ❌ TypeScript type only — no runtime validation
+- **Missing**: Zod schemas for runtime message validation
 
 **Validation rules:**
-- Channel config: Required fields based on platform, token format validation
-- Inbound messages: Required channel, senderId, text; optional media/group
-- Outbound messages: Required text; optional metadata
-- CLI commands: Valid command name, handler function exists
+- Channel config: ✅ Required fields based on platform, token format validation (Zod)
+- Inbound messages: ❌ Runtime validation — relies on TypeScript only
+- Outbound messages: ❌ Runtime validation — relies on TypeScript only
+- CLI commands: ❌ Runtime validation — relies on TypeScript only
 - Platform messages: Conform to platform API specifications
 
 **Expected shape of objects:**
