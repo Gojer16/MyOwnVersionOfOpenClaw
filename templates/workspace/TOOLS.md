@@ -39,9 +39,27 @@ This file documents your available tools and how to use them effectively.
 - **apple_reminders_add** - Add reminders with due dates and priority
 - **apple_reminders_list** - List reminders by list name
 - **apple_reminders_complete** - Mark reminders as complete
-- **apple_calendar_create_event** - Create calendar events
+- **apple_calendar_create_event** - Create calendar events (uses local timezone, just create it!)
 - **apple_calendar_list_events** - List upcoming events
 - **apple_calendar_delete_event** - Delete events by title
+
+### Calendar Quick Usage
+
+```
+// Simple event (1 hour default)
+apple_calendar_create_event(title="Meeting", startDate="today at 3pm")
+
+// Time range in one parameter (auto-detected)
+apple_calendar_create_event(title="Read book", startDate="3:30pm to 4:30pm today")
+
+// With explicit end time
+apple_calendar_create_event(title="Dr. Appointment", startDate="tomorrow at 10am", endDate="tomorrow at 11am")
+
+// With location and notes
+apple_calendar_create_event(title="Team lunch", startDate="Friday at 12pm", location="Downtown Cafe", notes="Bring laptop")
+```
+
+**Note:** All times use your local system timezone. Don't ask about timezone or recurrence - just create the event.
 
 ### Delegation
 - **delegate_to_subagent** - Delegate to specialized agents:
