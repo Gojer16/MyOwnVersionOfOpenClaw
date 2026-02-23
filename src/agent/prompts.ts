@@ -232,20 +232,35 @@ export function buildSystemPrompt(
 
             // Add configured channels information
             const channels: string[] = [];
+            
+            // Telegram channel status
             if (config?.channels?.telegram?.enabled && config.channels.telegram.botToken) {
-                channels.push(`✅ **Telegram** - Bot configured, ${config.channels.telegram.allowedUsers?.length || 0} allowed user(s)`);
+                channels.push(`✅ **Telegram** - Bot configured (@${config.channels.telegram.botToken.split(':')[0]}), ${config.channels.telegram.allowedUsers?.length || 0} allowed user(s)`);
+                channels.push(`   **Usage**: Users message the bot directly. Responses are AUTOMATICALLY delivered.`);
             } else if (config?.channels?.telegram?.enabled) {
-                channels.push(`⚠️ **Telegram** - Enabled but missing bot token`);
+                channels.push(`⚠️ **Telegram** - Enabled but MISSING bot token in .env`);
+                channels.push(`   **Fix**: Add TELEGRAM_BOT_TOKEN to ~/.talon/.env`);
+            } else {
+                channels.push(`❌ **Telegram** - Disabled in config.json`);
             }
+            
+            // WhatsApp channel status (whatsapp-web.js - FREE, no Business API needed)
             if (config?.channels?.whatsapp?.enabled) {
-                channels.push(`✅ **WhatsApp** - Configured, ${config.channels.whatsapp.allowedUsers?.length || 0} allowed user(s)`);
+                const userCount = config.channels.whatsapp.allowedUsers?.length || 0;
+                channels.push(`✅ **WhatsApp** - Configured (whatsapp-web.js), ${userCount} allowed user(s)`);
+                channels.push(`   **Usage**: Users message your number directly. QR code auth. Responses AUTOMATICALLY delivered.`);
+                channels.push(`   **Note**: Uses FREE whatsapp-web.js library - NO Business API required!`);
+            } else {
+                channels.push(`❌ **WhatsApp** - Disabled in config.json`);
             }
+            
+            // CLI channel status
             if (config?.channels?.cli?.enabled) {
                 channels.push(`✅ **CLI** - Terminal interface active`);
             }
             
             if (channels.length > 0) {
-                prompt += `\n\n## Configured Communication Channels\n\n${channels.join('\n')}\n\n**Important**: When users message you via these channels, your responses are AUTOMATICALLY delivered to them on the same channel. You do NOT need to use any special tool - just respond naturally and the channel system handles delivery.`;
+                prompt += `\n\n## 📱 Configured Communication Channels\n\n${channels.join('\n')}\n\n**CRITICAL**: When users message you via these channels, your responses are AUTOMATICALLY delivered to them on the same channel. You do NOT need any special tool or API - just respond naturally and the channel system handles delivery. The user's config already has everything needed.`;
             }
         }
     }

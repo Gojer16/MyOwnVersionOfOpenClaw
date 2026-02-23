@@ -528,6 +528,54 @@ TALON_TOKEN=your-auth-token
    - Scan the QR code displayed in terminal with your WhatsApp phone app
    - Session persists across restarts
 
+### WhatsApp Business API (Enterprise Alternative)
+
+For enterprise users who need official WhatsApp Business API integration:
+
+**Requirements:**
+- WhatsApp Business API account via Meta or provider (Twilio, MessageBird, etc.)
+- Business phone number (cannot use personal WhatsApp)
+- Monthly fees apply (varies by provider and message volume)
+
+**Setup with Twilio:**
+1. **Create Twilio account** at [twilio.com](https://twilio.com)
+2. **Get WhatsApp sandbox** or production number
+3. **Install Twilio CLI**:
+   ```bash
+   npm install twilio
+   ```
+4. **Add to `.env`**:
+   ```bash
+   TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxx
+   TWILIO_AUTH_TOKEN=your_auth_token
+   TWILIO_WHATSAPP_NUMBER=+14155238886
+   ```
+5. **Update `config.json`**:
+   ```json
+   "whatsapp": {
+     "enabled": true,
+     "provider": "twilio",
+     "accountSid": "${TWILIO_ACCOUNT_SID}",
+     "authToken": "${TWILIO_AUTH_TOKEN}",
+     "whatsappNumber": "${TWILIO_WHATSAPP_NUMBER}",
+     "allowedUsers": ["+1234567890"]
+   }
+   ```
+
+**Benefits of Business API:**
+- ✅ Official Meta support
+- ✅ Higher message limits
+- ✅ Verified business profile
+- ✅ Analytics and insights
+- ✅ Multi-agent support
+
+**Limitations:**
+- ❌ Monthly costs ($0.005-$0.10 per message)
+- ❌ Approval process required
+- ❌ Business use only (no personal accounts)
+
+**Note**: The default `whatsapp-web.js` integration is FREE and recommended for personal use. Business API is only needed for enterprise scenarios.
+
 ---
 
 ## 📚 Documentation
