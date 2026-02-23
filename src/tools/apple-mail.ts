@@ -1,12 +1,84 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+// ─── Bulletproof Apple Mail Tools ──────────────────────────────────
+// Zod-validated, structured JSON output, safe AppleScript execution
+
+import { z } from 'zod';
 import { logger } from '../utils/logger.js';
+import {
+    formatSuccess,
+    formatError,
+    escapeAppleScript,
+    createBaseString,
+    safeExecAppleScript,
+    checkPlatform,
+    checkAppPermission,
+    handleAppleScriptError,
+    getPermissionRecoverySteps,
+    DELIMITER,
+} from './apple-shared.js';
 
-const execAsync = promisify(exec);
+// ─── Zod Schemas ──────────────────────────────────────────────────
 
-function escapeAppleScript(str: string): string {
-    return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+const ListEmailsSchema = z.object({
+    count: z.number().int().min(1).max(50).default(10),
+    mailbox: createBaseString(100, 'Mailbox name is too long').default('INBOX'),
+    unreadOnly: z.boolean().default(false),
+}).strict();
+
+const GetRecentSchema = z.object({
+    hours: z.number().int().min(1).max(720).default(24),
+    count: z.number().int().min(1).max(50).default(10),
+}).strict();
+
+const SearchEmailsSchema = z.object({
+    query: createBaseString(500, 'Search query is too long'),
+    count: z.number().int().min(1).max(20).default(10),
+    mailbox: createBaseString(100, 'Mailbox name is too long').optional(),
+}).strict();
+
+const GetEmailContentSchema = z.object({
+    index: z.number().int().min(1, 'Index must be at least 1'),
+    mailbox: createBaseString(100, 'Mailbox name is too long').default('INBOX'),
+}).strict();
+
+const CountEmailsSchema = z.object({
+    mailbox: createBaseString(100, 'Mailbox name is too long').default('INBOX'),
+    unreadOnly: z.boolean().default(false),
+}).strict();
+
+// ─── Permission Check ─────────────────────────────────────────────
+
+async function checkMailPermission() {
+    return checkAppPermission('Mail', `tell application "Mail"
+    set acctCount to count of accounts
+    return acctCount
+end tell`);
 }
+
+// ─── Shared Sort Handler ──────────────────────────────────────────
+
+const SORT_HANDLER = `
+on sortMessagesByDate(messageList)
+    set sortedList to {}
+    repeat with msg in messageList
+        set msgDate to date received of msg
+        set insertIndex to 1
+        repeat with i from 1 to count of sortedList
+            if msgDate < date received of (item i of sortedList) then
+                set insertIndex to i + 1
+            else
+                exit repeat
+            end if
+        end repeat
+        if insertIndex > count of sortedList then
+            set end of sortedList to msg
+        else
+            set sortedList to (items 1 thru (insertIndex - 1) of sortedList) & {msg} & (items insertIndex thru -1 of sortedList)
+        end if
+    end repeat
+    return sortedList
+end sortMessagesByDate`;
+
+// ─── Tools ────────────────────────────────────────────────────────
 
 export const appleMailTools = [
     {
@@ -29,14 +101,25 @@ export const appleMailTools = [
                 }
             },
         },
-        async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Apple Mail is only available on macOS';
+        async execute(rawArgs: Record<string, unknown>): Promise<string> {
+            const startTime = Date.now();
+
+            const platformErr = checkPlatform('Apple Mail', startTime);
+            if (platformErr) return platformErr;
+
+            const parsed = ListEmailsSchema.safeParse(rawArgs);
+            if (!parsed.success) {
+                return formatError('VALIDATION_ERROR', 'Input validation failed', false, { errors: parsed.error.format() }, startTime);
             }
 
-            const count = Math.min((args.count as number) || 10, 50);
-            const mailbox = escapeAppleScript((args.mailbox as string) || 'INBOX');
-            const unreadOnly = args.unreadOnly === true;
+            const args = parsed.data;
+
+            const permCheck = await checkMailPermission();
+            if (!permCheck.granted) {
+                return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Mail', true, {}, startTime, getPermissionRecoverySteps('Mail'));
+            }
+
+            const mailbox = escapeAppleScript(args.mailbox);
 
             const script = `tell application "Mail"
     if not running then launch
@@ -49,13 +132,15 @@ export const appleMailTools = [
     set allMessages to messages of targetMailbox
     
     -- Filter by read status if requested
-    if ${unreadOnly} then
+    if ${args.unreadOnly} then
         set allMessages to (messages of targetMailbox whose read status is false)
     end if
     
     -- Sort by date (newest first) and limit count
     set sortedMessages to my sortMessagesByDate(allMessages)
-    set limitedMessages to items 1 thru (min(${count}, count of sortedMessages)) of sortedMessages
+    set resultCount to min(${args.count}, count of sortedMessages)
+    if resultCount = 0 then return "NO_EMAILS"
+    set limitedMessages to items 1 thru resultCount of sortedMessages
     
     repeat with i from 1 to count of limitedMessages
         set msg to item i of limitedMessages
@@ -79,45 +164,34 @@ export const appleMailTools = [
         set end of emailList to emailInfo
     end repeat
     
-    if (count of emailList) = 0 then
-        return "No emails found in ${mailbox}"
-    else
-        return emailList as text
-    end if
+    return emailList as text
 end tell
-
--- Helper handler to sort messages by date
-on sortMessagesByDate(messageList)
-    set sortedList to {}
-    repeat with msg in messageList
-        set msgDate to date received of msg
-        set insertIndex to 1
-        repeat with i from 1 to count of sortedList
-            if msgDate < date received of (item i of sortedList) then
-                set insertIndex to i + 1
-            else
-                exit repeat
-            end if
-        end repeat
-        if insertIndex > count of sortedList then
-            set end of sortedList to msg
-        else
-            set sortedList to (items 1 thru (insertIndex - 1) of sortedList) & {msg} & (items insertIndex thru -1 of sortedList)
-        end if
-    end repeat
-    return sortedList
-end sortMessagesByDate`;
+${SORT_HANDLER}`;
 
             try {
-                const { stdout } = await execAsync(`osascript <<'APPLESCRIPT'
-${script}
-APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
-                const result = stdout.trim();
-                logger.info({ count, mailbox, unreadOnly, resultLength: result.length }, 'Apple Mail emails listed');
-                return result || `No emails found in ${mailbox}`;
+                const { stdout } = await safeExecAppleScript(script, 45000);
+                const output = stdout.trim();
+
+                if (output === 'NO_EMAILS') {
+                    return formatSuccess({
+                        emails: [],
+                        count: 0,
+                        message: `No emails found in ${args.mailbox}`,
+                        mailbox: args.mailbox,
+                    }, {}, startTime);
+                }
+
+                logger.info({ count: args.count, mailbox: args.mailbox, unreadOnly: args.unreadOnly, resultLength: output.length }, 'Apple Mail emails listed');
+
+                return formatSuccess({
+                    emails: output,
+                    mailbox: args.mailbox,
+                    requestedCount: args.count,
+                    unreadOnly: args.unreadOnly,
+                    message: `Listed emails from ${args.mailbox}`,
+                }, {}, startTime);
             } catch (error) {
-                logger.error({ error, mailbox }, 'Failed to list Apple Mail emails');
-                return `Error: ${(error as Error).message}`;
+                return handleAppleScriptError(error, 'Mail', { mailbox: args.mailbox }, startTime);
             }
         },
     },
@@ -137,20 +211,30 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
                 }
             },
         },
-        async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Apple Mail is only available on macOS';
+        async execute(rawArgs: Record<string, unknown>): Promise<string> {
+            const startTime = Date.now();
+
+            const platformErr = checkPlatform('Apple Mail', startTime);
+            if (platformErr) return platformErr;
+
+            const parsed = GetRecentSchema.safeParse(rawArgs);
+            if (!parsed.success) {
+                return formatError('VALIDATION_ERROR', 'Input validation failed', false, { errors: parsed.error.format() }, startTime);
             }
 
-            const hours = (args.hours as number) || 24;
-            const maxCount = (args.count as number) || 10;
+            const args = parsed.data;
+
+            const permCheck = await checkMailPermission();
+            if (!permCheck.granted) {
+                return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Mail', true, {}, startTime, getPermissionRecoverySteps('Mail'));
+            }
 
             const script = `tell application "Mail"
     if not running then launch
     activate
     
     set targetMailbox to mailbox "INBOX" of first account
-    set cutoffDate to (current date) - (${hours} * hours)
+    set cutoffDate to (current date) - (${args.hours} * hours)
     set emailList to {}
     
     -- Get recent messages only
@@ -160,8 +244,8 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
     set sortedMessages to my sortMessagesByDate(recentMessages)
     
     -- Limit to requested count
-    set resultCount to min(${maxCount}, count of sortedMessages)
-    if resultCount = 0 then return "No emails from last ${hours} hours"
+    set resultCount to min(${args.count}, count of sortedMessages)
+    if resultCount = 0 then return "NO_EMAILS"
     
     set limitedMessages to items 1 thru resultCount of sortedMessages
     
@@ -186,38 +270,31 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
     
     return emailList as text
 end tell
-
-on sortMessagesByDate(messageList)
-    set sortedList to {}
-    repeat with msg in messageList
-        set msgDate to date received of msg
-        set insertIndex to 1
-        repeat with i from 1 to count of sortedList
-            if msgDate < date received of (item i of sortedList) then
-                set insertIndex to i + 1
-            else
-                exit repeat
-            end if
-        end repeat
-        if insertIndex > count of sortedList then
-            set end of sortedList to msg
-        else
-            set sortedList to (items 1 thru (insertIndex - 1) of sortedList) & {msg} & (items insertIndex thru -1 of sortedList)
-        end if
-    end repeat
-    return sortedList
-end sortMessagesByDate`;
+${SORT_HANDLER}`;
 
             try {
-                const { stdout } = await execAsync(`osascript <<'APPLESCRIPT'
-${script}
-APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
-                const result = stdout.trim();
-                logger.info({ hours, maxCount, resultLength: result.length }, 'Apple Mail recent emails retrieved');
-                return result || `No emails from last ${hours} hours`;
+                const { stdout } = await safeExecAppleScript(script, 45000);
+                const output = stdout.trim();
+
+                if (output === 'NO_EMAILS') {
+                    return formatSuccess({
+                        emails: [],
+                        count: 0,
+                        message: `No emails from last ${args.hours} hours`,
+                        hours: args.hours,
+                    }, {}, startTime);
+                }
+
+                logger.info({ hours: args.hours, maxCount: args.count, resultLength: output.length }, 'Apple Mail recent emails retrieved');
+
+                return formatSuccess({
+                    emails: output,
+                    hours: args.hours,
+                    requestedCount: args.count,
+                    message: `Recent emails from last ${args.hours} hours`,
+                }, {}, startTime);
             } catch (error) {
-                logger.error({ error, hours }, 'Failed to get recent Apple Mail emails');
-                return `Error: ${(error as Error).message}`;
+                return handleAppleScriptError(error, 'Mail', { hours: args.hours }, startTime);
             }
         },
     },
@@ -242,19 +319,29 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
             },
             required: ['query'],
         },
-        async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Apple Mail is only available on macOS';
+        async execute(rawArgs: Record<string, unknown>): Promise<string> {
+            const startTime = Date.now();
+
+            const platformErr = checkPlatform('Apple Mail', startTime);
+            if (platformErr) return platformErr;
+
+            const parsed = SearchEmailsSchema.safeParse(rawArgs);
+            if (!parsed.success) {
+                return formatError('VALIDATION_ERROR', 'Input validation failed', false, { errors: parsed.error.format() }, startTime);
             }
 
-            const query = escapeAppleScript(args.query as string);
-            const count = Math.min((args.count as number) || 10, 20);
-            const mailbox = args.mailbox as string | undefined;
+            const args = parsed.data;
+
+            const permCheck = await checkMailPermission();
+            if (!permCheck.granted) {
+                return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Mail', true, {}, startTime, getPermissionRecoverySteps('Mail'));
+            }
+
+            const query = escapeAppleScript(args.query);
 
             let searchScript: string;
-
-            if (mailbox) {
-                const mailboxName = escapeAppleScript(mailbox);
+            if (args.mailbox) {
+                const mailboxName = escapeAppleScript(args.mailbox);
                 searchScript = `set targetMailbox to mailbox "${mailboxName}" of first account
     set foundMessages to (messages of targetMailbox whose subject contains "${query}" or sender contains "${query}" or content contains "${query}")`;
             } else {
@@ -274,14 +361,14 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
     ${searchScript}
     
     if (count of foundMessages) = 0 then
-        return "No emails found matching '${args.query}'"
+        return "NO_RESULTS"
     end if
     
     -- Sort by date (newest first)
     set sortedMessages to my sortMessagesByDate(foundMessages)
     
     -- Limit results
-    set resultCount to min(${count}, count of sortedMessages)
+    set resultCount to min(${args.count}, count of sortedMessages)
     set limitedMessages to items 1 thru resultCount of sortedMessages
     
     set emailList to {}
@@ -306,38 +393,32 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
     
     return emailList as text
 end tell
-
-on sortMessagesByDate(messageList)
-    set sortedList to {}
-    repeat with msg in messageList
-        set msgDate to date received of msg
-        set insertIndex to 1
-        repeat with i from 1 to count of sortedList
-            if msgDate < date received of (item i of sortedList) then
-                set insertIndex to i + 1
-            else
-                exit repeat
-            end if
-        end repeat
-        if insertIndex > count of sortedList then
-            set end of sortedList to msg
-        else
-            set sortedList to (items 1 thru (insertIndex - 1) of sortedList) & {msg} & (items insertIndex thru -1 of sortedList)
-        end if
-    end repeat
-    return sortedList
-end sortMessagesByDate`;
+${SORT_HANDLER}`;
 
             try {
-                const { stdout } = await execAsync(`osascript <<'APPLESCRIPT'
-${script}
-APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
-                const result = stdout.trim();
-                logger.info({ query, count, resultLength: result.length }, 'Apple Mail search completed');
-                return result || `No emails found matching '${args.query}'`;
+                const { stdout } = await safeExecAppleScript(script, 45000);
+                const output = stdout.trim();
+
+                if (output === 'NO_RESULTS') {
+                    return formatSuccess({
+                        emails: [],
+                        count: 0,
+                        message: `No emails found matching "${args.query}"`,
+                        query: args.query,
+                    }, {}, startTime);
+                }
+
+                logger.info({ query: args.query, count: args.count, resultLength: output.length }, 'Apple Mail search completed');
+
+                return formatSuccess({
+                    emails: output,
+                    query: args.query,
+                    requestedCount: args.count,
+                    mailbox: args.mailbox || 'all',
+                    message: `Search results for "${args.query}"`,
+                }, {}, startTime);
             } catch (error) {
-                logger.error({ error, query }, 'Failed to search Apple Mail');
-                return `Error: ${(error as Error).message}`;
+                return handleAppleScriptError(error, 'Mail', { query: args.query }, startTime);
             }
         },
     },
@@ -358,13 +439,25 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
             },
             required: ['index'],
         },
-        async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Apple Mail is only available on macOS';
+        async execute(rawArgs: Record<string, unknown>): Promise<string> {
+            const startTime = Date.now();
+
+            const platformErr = checkPlatform('Apple Mail', startTime);
+            if (platformErr) return platformErr;
+
+            const parsed = GetEmailContentSchema.safeParse(rawArgs);
+            if (!parsed.success) {
+                return formatError('VALIDATION_ERROR', 'Input validation failed', false, { errors: parsed.error.format() }, startTime);
             }
 
-            const index = args.index as number;
-            const mailbox = escapeAppleScript((args.mailbox as string) || 'INBOX');
+            const args = parsed.data;
+
+            const permCheck = await checkMailPermission();
+            if (!permCheck.granted) {
+                return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Mail', true, {}, startTime, getPermissionRecoverySteps('Mail'));
+            }
+
+            const mailbox = escapeAppleScript(args.mailbox);
 
             const script = `tell application "Mail"
     if not running then launch
@@ -372,11 +465,11 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
     set targetMailbox to mailbox "${mailbox}" of first account
     set allMessages to messages of targetMailbox
     
-    if ${index} > (count of allMessages) then
-        return "Error: Email index ${index} not found (only " & (count of allMessages) & " emails in inbox)"
+    if ${args.index} > (count of allMessages) then
+        return "INDEX_OUT_OF_RANGE"
     end if
     
-    set targetMessage to item ${index} of allMessages
+    set targetMessage to item ${args.index} of allMessages
     
     set msgSubject to subject of targetMessage
     if msgSubject is missing value then set msgSubject to "(No Subject)"
@@ -401,15 +494,27 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
 end tell`;
 
             try {
-                const { stdout } = await execAsync(`osascript <<'APPLESCRIPT'
-${script}
-APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
-                const result = stdout.trim();
-                logger.info({ index, mailbox, resultLength: result.length }, 'Apple Mail email content retrieved');
-                return result || 'Could not retrieve email content';
+                const { stdout } = await safeExecAppleScript(script, 45000);
+                const output = stdout.trim();
+
+                if (output === 'INDEX_OUT_OF_RANGE') {
+                    return formatError('INDEX_OUT_OF_RANGE', `Email index ${args.index} does not exist in "${args.mailbox}"`, true, {
+                        index: args.index,
+                        mailbox: args.mailbox,
+                        suggestion: 'Use apple_mail_list_emails first to see available emails',
+                    }, startTime);
+                }
+
+                logger.info({ index: args.index, mailbox: args.mailbox, resultLength: output.length }, 'Apple Mail email content retrieved');
+
+                return formatSuccess({
+                    content: output,
+                    index: args.index,
+                    mailbox: args.mailbox,
+                    message: `Email content retrieved from ${args.mailbox}`,
+                }, {}, startTime);
             } catch (error) {
-                logger.error({ error, index }, 'Failed to get Apple Mail email content');
-                return `Error: ${(error as Error).message}`;
+                return handleAppleScriptError(error, 'Mail', { index: args.index, mailbox: args.mailbox }, startTime);
             }
         },
     },
@@ -429,43 +534,70 @@ APPLESCRIPT`, { timeout: 45000, shell: '/bin/bash' });
                 }
             },
         },
-        async execute(args: Record<string, unknown>): Promise<string> {
-            if (process.platform !== 'darwin') {
-                return 'Error: Apple Mail is only available on macOS';
+        async execute(rawArgs: Record<string, unknown>): Promise<string> {
+            const startTime = Date.now();
+
+            const platformErr = checkPlatform('Apple Mail', startTime);
+            if (platformErr) return platformErr;
+
+            const parsed = CountEmailsSchema.safeParse(rawArgs);
+            if (!parsed.success) {
+                return formatError('VALIDATION_ERROR', 'Input validation failed', false, { errors: parsed.error.format() }, startTime);
             }
 
-            const mailbox = escapeAppleScript((args.mailbox as string) || 'INBOX');
-            const unreadOnly = args.unreadOnly === true;
+            const args = parsed.data;
 
-            let script: string;
+            const permCheck = await checkMailPermission();
+            if (!permCheck.granted) {
+                return formatError('PERMISSION_DENIED', 'Terminal does not have permission to access Mail', true, {}, startTime, getPermissionRecoverySteps('Mail'));
+            }
 
-            if (unreadOnly) {
-                script = `tell application "Mail"
+            const mailbox = escapeAppleScript(args.mailbox);
+
+            const script = args.unreadOnly
+                ? `tell application "Mail"
     if not running then launch
     set targetMailbox to mailbox "${mailbox}" of first account
     set unreadCount to count of (messages of targetMailbox whose read status is false)
-    return "Unread emails in ${mailbox}: " & unreadCount
-end tell`;
-            } else {
-                script = `tell application "Mail"
+    return unreadCount as text
+end tell`
+                : `tell application "Mail"
     if not running then launch
     set targetMailbox to mailbox "${mailbox}" of first account
     set totalCount to count of messages of targetMailbox
     set unreadCount to count of (messages of targetMailbox whose read status is false)
-    return "Total emails in ${mailbox}: " & totalCount & "\\nUnread: " & unreadCount
+    return totalCount & "${DELIMITER}" & unreadCount
 end tell`;
-            }
 
             try {
-                const { stdout } = await execAsync(`osascript <<'APPLESCRIPT'
-${script}
-APPLESCRIPT`, { timeout: 15000, shell: '/bin/bash' });
-                const result = stdout.trim();
-                logger.info({ mailbox, unreadOnly, result }, 'Apple Mail count retrieved');
-                return result;
+                const { stdout } = await safeExecAppleScript(script, 15000);
+                const output = stdout.trim();
+
+                if (args.unreadOnly) {
+                    const unreadCount = parseInt(output, 10) || 0;
+                    logger.info({ mailbox: args.mailbox, unreadCount }, 'Apple Mail unread count retrieved');
+
+                    return formatSuccess({
+                        mailbox: args.mailbox,
+                        unreadCount,
+                        message: `Unread emails in ${args.mailbox}: ${unreadCount}`,
+                    }, {}, startTime);
+                } else {
+                    const parts = output.split(DELIMITER);
+                    const totalCount = parseInt(parts[0], 10) || 0;
+                    const unreadCount = parseInt(parts[1], 10) || 0;
+
+                    logger.info({ mailbox: args.mailbox, totalCount, unreadCount }, 'Apple Mail count retrieved');
+
+                    return formatSuccess({
+                        mailbox: args.mailbox,
+                        totalCount,
+                        unreadCount,
+                        message: `Total emails in ${args.mailbox}: ${totalCount}, Unread: ${unreadCount}`,
+                    }, {}, startTime);
+                }
             } catch (error) {
-                logger.error({ error, mailbox }, 'Failed to count Apple Mail emails');
-                return `Error: ${(error as Error).message}`;
+                return handleAppleScriptError(error, 'Mail', { mailbox: args.mailbox }, startTime);
             }
         },
     },
