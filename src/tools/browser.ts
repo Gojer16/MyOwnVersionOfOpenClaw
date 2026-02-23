@@ -1,8 +1,10 @@
 // ─── Browser Tools ────────────────────────────────────────────────
 // Browser automation via Puppeteer
 // Provides: navigate, click, type, screenshot, extract
+// Includes Zod validation and process exit cleanup
 
 import puppeteer, { Browser, Page } from 'puppeteer';
+import { z } from 'zod';
 import type { TalonConfig } from '../config/schema.js';
 import { logger } from '../utils/logger.js';
 
@@ -13,15 +15,81 @@ interface BrowserResult {
     error?: string;
 }
 
+// ─── Input Validation Schemas ─────────────────────────────────────
+
+const NavigateSchema = z.object({
+    url: z.string()
+        .trim()
+        .min(1, 'URL cannot be empty')
+        .max(2048, 'URL too long (max 2048 chars)')
+        .url('Invalid URL format')
+        .refine(
+            (url) => url.startsWith('http://') || url.startsWith('https://'),
+            'URL must start with http:// or https://'
+        ),
+});
+
+const ClickSchema = z.object({
+    selector: z.string()
+        .trim()
+        .min(1, 'Selector cannot be empty')
+        .max(500, 'Selector too long'),
+});
+
+const TypeSchema = z.object({
+    selector: z.string()
+        .trim()
+        .min(1, 'Selector cannot be empty')
+        .max(500, 'Selector too long'),
+    text: z.string()
+        .min(1, 'Text cannot be empty')
+        .max(5000, 'Text too long'),
+});
+
+const ExtractSchema = z.object({
+    selector: z.string()
+        .trim()
+        .max(500, 'Selector too long')
+        .optional()
+        .transform((val) => val || undefined),
+});
+
 export class BrowserTools {
     private browser: Browser | null = null;
     private page: Page | null = null;
     private headless: boolean;
     private viewport: { width: number; height: number };
+    private cleanupRegistered = false;
 
     constructor(config: TalonConfig) {
         this.headless = config.tools.browser.headless;
         this.viewport = config.tools.browser.viewport;
+        
+        // Register cleanup handler on first instantiation
+        if (!this.cleanupRegistered) {
+            process.on('exit', () => {
+                if (this.browser) {
+                    logger.info('Process exiting, closing browser...');
+                    this.browser.close().catch(() => {});
+                }
+            });
+            
+            process.on('SIGTERM', () => {
+                if (this.browser) {
+                    this.browser.close().catch(() => {});
+                }
+                process.exit(0);
+            });
+            
+            process.on('SIGINT', () => {
+                if (this.browser) {
+                    this.browser.close().catch(() => {});
+                }
+                process.exit(0);
+            });
+            
+            this.cleanupRegistered = true;
+        }
     }
 
     /**
@@ -265,7 +333,16 @@ export function registerBrowserTools(config: TalonConfig) {
                 required: ['url'],
             },
             execute: async (args: Record<string, unknown>) => {
-                const result = await browserTools.navigate(args.url as string);
+                // Validate inputs
+                let url: string;
+                try {
+                    const parsed = NavigateSchema.parse(args);
+                    url = parsed.url as string;
+                } catch (error: any) {
+                    return `Error: ${error.errors?.[0]?.message || 'Invalid parameters'}`;
+                }
+                
+                const result = await browserTools.navigate(url);
                 return result.success ? result.content! : `Error: ${result.error}`;
             },
         },
@@ -283,7 +360,16 @@ export function registerBrowserTools(config: TalonConfig) {
                 required: ['selector'],
             },
             execute: async (args: Record<string, unknown>) => {
-                const result = await browserTools.click(args.selector as string);
+                // Validate inputs
+                let selector: string;
+                try {
+                    const parsed = ClickSchema.parse(args);
+                    selector = parsed.selector;
+                } catch (error: any) {
+                    return `Error: ${error.errors?.[0]?.message || 'Invalid parameters'}`;
+                }
+                
+                const result = await browserTools.click(selector);
                 return result.success ? result.content! : `Error: ${result.error}`;
             },
         },
@@ -305,7 +391,18 @@ export function registerBrowserTools(config: TalonConfig) {
                 required: ['selector', 'text'],
             },
             execute: async (args: Record<string, unknown>) => {
-                const result = await browserTools.type(args.selector as string, args.text as string);
+                // Validate inputs
+                let selector: string;
+                let text: string;
+                try {
+                    const parsed = TypeSchema.parse(args);
+                    selector = parsed.selector;
+                    text = parsed.text;
+                } catch (error: any) {
+                    return `Error: ${error.errors?.[0]?.message || 'Invalid parameters'}`;
+                }
+                
+                const result = await browserTools.type(selector, text);
                 return result.success ? result.content! : `Error: ${result.error}`;
             },
         },
@@ -336,7 +433,16 @@ export function registerBrowserTools(config: TalonConfig) {
                 },
             },
             execute: async (args: Record<string, unknown>) => {
-                const result = await browserTools.extract(args.selector as string | undefined);
+                // Validate inputs
+                let selector: string | undefined;
+                try {
+                    const parsed = ExtractSchema.parse(args);
+                    selector = parsed.selector;
+                } catch (error: any) {
+                    return `Error: ${error.errors?.[0]?.message || 'Invalid parameters'}`;
+                }
+                
+                const result = await browserTools.extract(selector);
                 return result.success ? result.content! : `Error: ${result.error}`;
             },
         },
