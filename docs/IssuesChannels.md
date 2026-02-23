@@ -459,10 +459,11 @@ eventBus.on('message.outbound', async ({ message, sessionId }) => {
 ## 7. Unused/Dead Code
 
 ### CHAN-024: `cli/index.ts.backup` exists in the codebase
-- [ ] **Severity**: 🟢 Low
+- [x] ✅ **RESOLVED**
+- **Severity**: 🟢 Low
 - **File**: `src/channels/cli/index.ts.backup` (12,104 bytes)
-- **Problem**: A backup file was left in the source tree. Should be in version control history, not committed.
-- **Fix**: Delete the file; rely on git history for recovery.
+- **Status**: Fixed — Backup file deleted
+- **Solution**: Removed backup file from source tree; git history available for recovery
 
 ---
 
