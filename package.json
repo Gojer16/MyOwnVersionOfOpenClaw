@@ -9,7 +9,7 @@
     },
     "scripts": {
         "dev": "tsx watch src/gateway/index.ts",
-        "build": "tsc && chmod +x dist/cli/index.js",
+        "build": "tsc && chmod +x dist/cli/index.js && cp src/storage/schema.sql dist/storage/",
         "build:web": "cd web && npm run build",
         "build:all": "npm run build && npm run build:web",
         "prestart": "npm run build",
