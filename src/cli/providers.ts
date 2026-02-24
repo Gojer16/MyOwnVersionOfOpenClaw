@@ -55,18 +55,16 @@ export const PROVIDERS: ProviderDef[] = [
     },
     {
         id: 'openai',
-        name: 'OpenAI (Codex OAuth + API key)',
+        name: 'OpenAI API',
         envVar: 'OPENAI_API_KEY',
         baseUrl: 'https://api.openai.com/v1',
         apiType: 'openai-compatible',
         models: [
-            { id: 'gpt-5.1-thinking', name: 'GPT-5.1 Thinking', isDefault: true },
-            { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex' },
-            { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini' },
-            { id: 'gpt-4o', name: 'GPT-4o' },
+            { id: 'gpt-4o', name: 'GPT-4o', isDefault: true },
             { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+            { id: 'o3-mini', name: 'o3-mini (Reasoning)' },
         ],
-        description: 'OpenAI reasoning + Codex models',
+        description: 'OpenAI\'s flagship models',
     },
 ];
 
