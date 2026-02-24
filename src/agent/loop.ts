@@ -10,8 +10,6 @@ import type { MemoryCompressor } from '../memory/compressor.js';
 import type { LLMTool, LLMResponse, LLMStreamChunk } from './providers/openai-compatible.js';
 import { FallbackRouter, type FallbackAttempt } from './fallback.js';
 import { evaluateContextWindow, logContextWindowStatus, truncateMessagesToFit } from './context-guard.js';
-import { LlmTaskRouter, type TaskType } from '../llm/router.js';
-import { LlmCallLogger } from '../llm/call-logger.js';
 import { logger } from '../utils/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -24,17 +22,6 @@ export type LoopState =
     | 'compressing'  // Memory compression
     | 'responding'   // Sending final response
     | 'error';
-
-// Valid state transitions — prevents invalid jumps
-const ALLOWED_TRANSITIONS: Record<LoopState, LoopState[]> = {
-    'idle': ['thinking'],
-    'thinking': ['executing', 'compressing', 'error'],
-    'executing': ['evaluating', 'error'],
-    'evaluating': ['responding', 'executing', 'thinking', 'error'],
-    'compressing': ['thinking', 'error'],
-    'responding': ['idle'],
-    'error': ['idle'],
-};
 
 export interface AgentChunk {
     type: 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'done' | 'error';
@@ -62,9 +49,8 @@ export class AgentLoop {
     private maxIterations: number;
     private fallbackRouter: FallbackRouter;
     private sessionId: string | null = null;
-    private llmCallLogger = new LlmCallLogger();
-
-
+    private subagentRegistry?: any; // Will be set via setSubagentRegistry
+    
     // Rate limiting for tool calls
     private lastToolCallTime = 0;
     private minToolCallInterval = 500; // Minimum 500ms between tool calls
@@ -81,14 +67,10 @@ export class AgentLoop {
     }
 
     /**
-     * Transition to a new state with validation.
-     * Logs a warning if the transition is unexpected.
+     * Set subagent registry for delegation.
      */
-    private transition(to: LoopState): void {
-        if (!ALLOWED_TRANSITIONS[this.state]?.includes(to)) {
-            logger.warn({ from: this.state, to }, 'Unexpected state transition');
-        }
-        this.state = to;
+    setSubagentRegistry(registry: any): void {
+        this.subagentRegistry = registry;
     }
 
     /**
@@ -186,7 +168,7 @@ export class AgentLoop {
      * Yields AgentChunks as the agent thinks, calls tools, and responds.
      */
     async *run(session: Session): AsyncIterable<AgentChunk> {
-        this.transition('thinking');
+        this.state = 'thinking';
         this.sessionId = session.id;
         this.eventBus.emit('agent.thinking', { sessionId: session.id });
 
@@ -195,11 +177,10 @@ export class AgentLoop {
             yield* this.compressMemory(session);
         }
 
-        // Route provider/model based on the latest user task type
-        const taskType = this.detectTaskType(session);
-        const route = this.modelRouter.getProviderForTaskType(taskType) ?? this.modelRouter.getDefaultProvider();
+        // Get the LLM provider
+        const route = this.modelRouter.getDefaultProvider();
         if (!route) {
-            this.transition('error');
+            this.state = 'error';
             yield {
                 type: 'error',
                 content: 'No LLM provider configured. Run `talon setup` to configure one.',
@@ -219,12 +200,11 @@ export class AgentLoop {
 
         while (iteration < this.maxIterations) {
             iteration++;
-            this.transition('executing');
+            this.state = 'executing';
 
             logger.info({
                 sessionId: session.id,
                 iteration,
-                taskType,
                 provider: route.providerId,
                 model: route.model,
             }, 'Agent loop iteration');
@@ -254,7 +234,6 @@ export class AgentLoop {
 
             // Make LLM call with fallback support + timeout to prevent hanging
             let response: LLMResponse;
-            let llmLatencyMs = 0;
 
             // Reset to default provider for this iteration
             usedProviderId = route.providerId;
@@ -263,9 +242,8 @@ export class AgentLoop {
             // Helper: race the LLM call against a timeout
             const LLM_TIMEOUT_MS = 90_000; // 90 seconds max per LLM call
             const llmCallWithTimeout = async (): Promise<LLMResponse> => {
-                let timeoutId: NodeJS.Timeout;
                 const timeoutPromise = new Promise<never>((_, reject) => {
-                    timeoutId = setTimeout(() => reject(new Error(
+                    setTimeout(() => reject(new Error(
                         `LLM call timed out after ${LLM_TIMEOUT_MS / 1000}s — the AI provider may be overloaded`
                     )), LLM_TIMEOUT_MS);
                 });
@@ -311,28 +289,15 @@ export class AgentLoop {
                     }
                 })();
 
-                return Promise.race([
-                    llmPromise.finally(() => clearTimeout(timeoutId)),
-                    timeoutPromise,
-                ]);
+                return Promise.race([llmPromise, timeoutPromise]);
             };
 
             try {
-                const llmStart = Date.now();
                 response = await llmCallWithTimeout();
-                llmLatencyMs = Date.now() - llmStart;
             } catch (err) {
-                this.transition('error');
+                this.state = 'error';
                 const message = err instanceof Error ? err.message : String(err);
                 logger.error({ err, iteration }, 'All LLM providers failed');
-                await this.llmCallLogger.log({
-                    provider: usedProviderId,
-                    model: usedModel,
-                    latencyMs: llmLatencyMs,
-                    taskType,
-                    ok: false,
-                    error: message,
-                });
 
                 // If we have pending tool results, surface them to the user
                 // so they can see what the tools returned before the LLM crashed
@@ -377,15 +342,6 @@ export class AgentLoop {
                     totalTokens: response.usage.totalTokens,
                 }, 'LLM usage');
             }
-
-            await this.llmCallLogger.log({
-                provider: usedProviderId,
-                model: usedModel,
-                latencyMs: llmLatencyMs,
-                usage: response.usage,
-                taskType,
-                ok: true,
-            });
 
             // Emit model used event
             if (this.sessionId) {
@@ -458,20 +414,20 @@ export class AgentLoop {
                             });
                         } catch (err) {
                             // Preserve full error context for debugging
-                            const errorDetails = err instanceof Error
+                            const errorDetails = err instanceof Error 
                                 ? {
                                     message: err.message,
                                     stack: err.stack,
                                     name: err.name,
                                 }
                                 : { error: err };
-
+                            
                             logger.error({
                                 tool: tc.name,
                                 args: tc.args,
                                 error: errorDetails,
                             }, 'Tool execution failed');
-
+                            
                             output = JSON.stringify({
                                 success: false,
                                 error: {
@@ -520,7 +476,7 @@ export class AgentLoop {
 
             // ─── No Tool Calls → Final Response ───────────────────
 
-            this.transition('evaluating');
+            this.state = 'evaluating';
 
             // If the LLM returned empty content but we had tool results,
             // DO NOT synthesize from tool results - this creates ugly output.
@@ -529,10 +485,10 @@ export class AgentLoop {
             if (!finalContent && pendingToolResults.length > 0) {
                 logger.warn({ iteration, toolCount: pendingToolResults.length },
                     'LLM returned empty content after tool calls — NOT synthesizing (clean UX)');
-
+                
                 // Clear pending results without showing them
                 pendingToolResults = [];
-
+                
                 // Return empty - renderer will show helpful message
                 finalContent = '';
             }
@@ -559,7 +515,7 @@ export class AgentLoop {
             }
 
             // Done!
-            this.transition('responding');
+            this.state = 'responding';
             yield {
                 type: 'done',
                 usage: response.usage,
@@ -568,12 +524,12 @@ export class AgentLoop {
                 iteration,
             };
 
-            this.transition('idle');
+            this.state = 'idle';
             return;
         }
 
         // Max iterations reached
-        this.transition('idle');
+        this.state = 'idle';
         logger.warn({
             sessionId: session.id,
             maxIterations: this.maxIterations,
@@ -607,53 +563,33 @@ export class AgentLoop {
     // ─── Memory Compression ─────────────────────────────────────
 
     private async *compressMemory(session: Session): AsyncIterable<AgentChunk> {
-        this.transition('compressing');
+        this.state = 'compressing';
 
         logger.info({ sessionId: session.id }, 'Starting memory compression');
 
-        try {
-            const messagesToCompress = this.memoryManager.getMessagesForCompression(session);
+        const messagesToCompress = this.memoryManager.getMessagesForCompression(session);
 
-            if (messagesToCompress.length === 0) return;
+        if (messagesToCompress.length === 0) return;
 
-            const formatted = this.memoryManager.formatMessagesForCompression(messagesToCompress);
+        const formatted = this.memoryManager.formatMessagesForCompression(messagesToCompress);
 
-            const newSummary = await this.memoryCompressor.compress(
-                session.memorySummary,
-                messagesToCompress,
-                () => formatted,
-            );
+        const newSummary = await this.memoryCompressor.compress(
+            session.memorySummary,
+            messagesToCompress,
+            () => formatted,
+        );
 
-            this.memoryManager.applyCompression(session, newSummary);
+        this.memoryManager.applyCompression(session, newSummary);
 
-            yield {
-                type: 'thinking',
-                content: `Compressed ${messagesToCompress.length} old messages into memory summary`,
-            };
-        } catch (err) {
-            logger.error({ err, sessionId: session.id }, 'Memory compression failed — continuing without compression');
-            yield {
-                type: 'thinking',
-                content: 'Memory compression skipped (will retry later)',
-            };
-        }
+        yield {
+            type: 'thinking',
+            content: `Compressed ${messagesToCompress.length} old messages into memory summary`,
+        };
     }
 
     // ─── State ──────────────────────────────────────────────────
 
     getState(): LoopState {
         return this.state;
-    }
-
-    private detectTaskType(session: Session): TaskType {
-        const lastUserMessage = [...session.messages].reverse().find(message => message.role === 'user');
-        if (!lastUserMessage) {
-            return 'plan';
-        }
-
-        return LlmTaskRouter.inferTaskType({
-            channel: lastUserMessage.channel,
-            text: lastUserMessage.content,
-        });
     }
 }
