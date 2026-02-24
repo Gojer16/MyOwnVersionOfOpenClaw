@@ -5,9 +5,22 @@ All notable changes to Talon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-02-23
+## [Unreleased] - 2026-02-24
 
 ### ✨ Added
+
+#### Personal Assistant Memory & Cron
+- **PROFILE.json**: Structured user profile (name, preferred name, timezone, working hours, preferred tools)
+- **Profile-aware greeting**: Uses preferred name when available
+- **Low-token memory recall**: Keyword-based retrieval with token caps
+- **Cron job persistence**: `~/.talon/workspace/cron.json`
+- **Cron actions**: `agent` (LLM prompt), `tool`, `message`
+- **Cron CLI commands**: `/cron list|add|show|edit|enable|disable|remove`
+- **profile_update tool**: Validated updates for PROFILE.json
+
+### 🔧 Changed
+- **Bootstrap** now uses `PROFILE.json` + `IDENTITY.md` to determine first-run
+- **System prompt** injects profile summary + compact facts instead of full files
 
 #### Channel Enhancements (CHAN-017, CHAN-018, CHAN-022, CHAN-023)
 - **Typing Indicators** (CHAN-017):
