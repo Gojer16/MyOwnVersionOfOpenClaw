@@ -4,11 +4,57 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { loadDailyMemories, extractUserName } from '../memory/daily.js';
+import { extractUserName } from '../memory/daily.js';
+import { truncateToTokens } from '../utils/tokens.js';
+import { buildProfileSummary, getProfileDisplayName, loadProfile } from '../memory/profile.js';
 
 const TALON_HOME = path.join(os.homedir(), '.talon');
 
 // ─── Helper Functions ─────────────────────────────────────────────
+
+/**
+ * Strip YAML frontmatter from template content.
+ */
+function stripFrontMatter(content: string): string {
+    if (!content.startsWith('---')) {
+        return content;
+    }
+    const endIndex = content.indexOf('\n---', 3);
+    if (endIndex === -1) {
+        return content;
+    }
+    const start = endIndex + '\n---'.length;
+    let trimmed = content.slice(start);
+    trimmed = trimmed.replace(/^\s+/, '');
+    return trimmed;
+}
+
+function normalizeForCompare(content: string): string {
+    return stripFrontMatter(content)
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+$/gm, '')
+        .trim();
+}
+
+function loadTemplateFile(templateDir: string | undefined, file: string): string | null {
+    if (!templateDir) return null;
+    const templatePath = path.join(templateDir, file);
+    if (!fs.existsSync(templatePath)) return null;
+    return fs.readFileSync(templatePath, 'utf-8');
+}
+
+function isWorkspaceTemplateEqual(
+    workspaceRoot: string,
+    templateDir: string | undefined,
+    file: string,
+): boolean | null {
+    const templateContent = loadTemplateFile(templateDir, file);
+    const workspaceContent = loadWorkspaceFile(workspaceRoot, file);
+
+    if (!templateContent || !workspaceContent) return null;
+
+    return normalizeForCompare(templateContent) === normalizeForCompare(workspaceContent);
+}
 
 /**
  * Check if a workspace file is still in its empty template state.
@@ -21,30 +67,29 @@ function isTemplateEmpty(content: string): boolean {
         '*(What do they care about?',
         '*(curated long-term memory)*',
         '*(Add anything useful',
+        '*(Nothing yet',
+        '<!-- ⚠️  TEMPLATE FILE',
+        '(not this template)',
+        'PERSONALIZATION INSTRUCTIONS:',
+        'Fill this in during your first conversation',
     ];
-    
-    // If it contains template text, it's still empty
-    if (templateIndicators.some(indicator => content.includes(indicator))) {
-        return true;
-    }
-    
+
     // Check if all the key fields are empty (just the label with no value)
     const lines = content.split('\n');
     let hasAnyFilledField = false;
-    
+
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         // Check if this is a field line: - **FieldName:** value or **FieldName:** value
         const fieldMatch = line.match(/^-?\s*\*\*([^*]+):\*\*\s*(.*)$/);
         if (fieldMatch) {
-            const fieldName = fieldMatch[1].trim();
             const fieldValue = fieldMatch[2].trim();
-            
+
             // Skip optional fields or template markers
-            if (fieldValue.includes('(optional)') || fieldValue.startsWith('_') || fieldValue.startsWith('*')) {
+            if (fieldValue.includes('(optional)') || fieldValue.startsWith('_') || fieldValue.startsWith('*') || fieldValue.startsWith('(')) {
                 continue;
             }
-            
+
             // If there's actual content after the colon
             if (fieldValue && fieldValue.length > 0) {
                 hasAnyFilledField = true;
@@ -52,8 +97,23 @@ function isTemplateEmpty(content: string): boolean {
             }
         }
     }
-    
-    return !hasAnyFilledField;
+
+    if (hasAnyFilledField) {
+        return false;
+    }
+
+    // Remove template indicators and empty field labels, then check if anything meaningful remains
+    const stripped = content
+        .split('\n')
+        .filter(line => !templateIndicators.some(indicator => line.includes(indicator)))
+        .filter(line => !/^\s*-?\s*\*\*[^*]+:\*\*\s*$/.test(line))
+        .join('\n')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/^#.*$/gm, '')
+        .replace(/^\s*$/gm, '')
+        .trim();
+
+    return stripped.length < 10;
 }
 
 // ─── Workspace File Loaders ───────────────────────────────────────
@@ -93,6 +153,61 @@ export function loadIdentity(workspaceRoot: string): string | null {
 }
 
 /**
+ * Load FACTS.json content from workspace (pretty-printed).
+ */
+export function loadFacts(workspaceRoot: string): string | null {
+    const content = loadWorkspaceFile(workspaceRoot, 'FACTS.json');
+    if (!content) return null;
+
+    try {
+        const parsed = JSON.parse(content);
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        return content;
+    }
+}
+
+function isFactsEmpty(content: string): boolean {
+    try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== 'object') return false;
+
+        const learnedFacts = Array.isArray(parsed.learned_facts) ? parsed.learned_facts.length : 0;
+        const user = (parsed.user && typeof parsed.user === 'object') ? parsed.user as Record<string, unknown> : {};
+        const userName = typeof user.name === 'string' ? user.name : '';
+        const prefs = (user.preferences && typeof user.preferences === 'object')
+            ? user.preferences as Record<string, unknown>
+            : {};
+        const hasMeaningfulPrefs = Object.entries(prefs).some(([key, value]) => {
+            if (key === 'theme' && value === 'dark') return false;
+            return value !== null && value !== '' && value !== undefined;
+        });
+        const env = (parsed.environment && typeof parsed.environment === 'object')
+            ? parsed.environment as Record<string, unknown>
+            : {};
+        const hasEnv = Object.values(env).some(value => value !== null && value !== '' && value !== undefined);
+
+        return learnedFacts === 0 && userName === 'User' && !hasMeaningfulPrefs && !hasEnv;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Load PROFILE.json content from workspace (pretty-printed).
+ */
+export function loadProfileRaw(workspaceRoot: string): string | null {
+    const content = loadWorkspaceFile(workspaceRoot, 'PROFILE.json');
+    if (!content) return null;
+    try {
+        const parsed = JSON.parse(content);
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        return content;
+    }
+}
+
+/**
  * Load AGENTS.md content from workspace (operating manual).
  */
 export function loadAgentsManual(workspaceRoot: string): string | null {
@@ -100,10 +215,50 @@ export function loadAgentsManual(workspaceRoot: string): string | null {
 }
 
 /**
- * Check if BOOTSTRAP.md exists (first-run detection).
+ * Check if bootstrap is needed.
+ * 
+ * Smart check: even if BOOTSTRAP.md exists, if both IDENTITY.md and USER.md
+ * are already populated, bootstrap is complete and we skip it.
+ * This prevents the "who am I?" loop when the LLM saved data but didn't delete BOOTSTRAP.md.
  */
-export function isBootstrapNeeded(workspaceRoot: string): boolean {
-    return fs.existsSync(resolveWorkspacePath(workspaceRoot, 'BOOTSTRAP.md'));
+export function isBootstrapNeeded(workspaceRoot: string, templateDir?: string): boolean {
+    const bootstrapPath = resolveWorkspacePath(workspaceRoot, 'BOOTSTRAP.md');
+    const bootstrapExists = fs.existsSync(bootstrapPath);
+
+    // Check if files are already populated or still template-identical
+    const identity = loadWorkspaceFile(workspaceRoot, 'IDENTITY.md');
+    const profile = loadWorkspaceFile(workspaceRoot, 'PROFILE.json');
+
+    const identityTemplateMatch = identity
+        ? isWorkspaceTemplateEqual(workspaceRoot, templateDir, 'IDENTITY.md')
+        : null;
+    const profileTemplateMatch = profile
+        ? isWorkspaceTemplateEqual(workspaceRoot, templateDir, 'PROFILE.json')
+        : null;
+
+    const identityIsTemplate = identity
+        ? (identityTemplateMatch ?? isTemplateEmpty(identity))
+        : true;
+    const profileFilled = loadProfile(workspaceRoot) !== null;
+    const profileIsTemplate = profile
+        ? (profileTemplateMatch ?? !profileFilled)
+        : true;
+
+    if (!identityIsTemplate && !profileIsTemplate) {
+        // Both files are populated — bootstrap is done!
+        // Auto-delete BOOTSTRAP.md to prevent future re-checks
+        if (bootstrapExists) {
+            try {
+                fs.unlinkSync(bootstrapPath);
+                console.log('✅ Bootstrap complete — BOOTSTRAP.md auto-deleted');
+            } catch {
+                // Non-fatal: if we can't delete, the check above prevents re-triggering
+            }
+        }
+        return false;
+    }
+
+    return bootstrapExists || identityIsTemplate || profileIsTemplate;
 }
 
 /**
@@ -130,30 +285,33 @@ export function buildSystemPrompt(
     soul: string,
     availableTools: string[],
     workspaceRoot?: string,
+    workspaceTemplateDir?: string,
     config?: any, // TalonConfig - optional channel configuration
 ): string {
     let prompt = soul;
-    
+
     const loadedFiles: Array<{ name: string; chars: number; status: string }> = [];
     loadedFiles.push({ name: 'SOUL.md', chars: soul.length, status: 'loaded' });
 
     // Inject user context if available
     if (workspaceRoot) {
-        const bootstrap = isBootstrapNeeded(workspaceRoot);
+        const bootstrap = isBootstrapNeeded(workspaceRoot, workspaceTemplateDir);
 
-        if (bootstrap) {
-            const bootstrapContent = loadBootstrap(workspaceRoot);
-            if (bootstrapContent) {
+            if (bootstrap) {
+                const bootstrapContent = loadBootstrap(workspaceRoot);
+                if (bootstrapContent) {
                 loadedFiles.push({ name: 'BOOTSTRAP.md', chars: bootstrapContent.length, status: 'loaded' });
-                
+
                 // 🛑 CRITICAL: If bootstrapping, REPLACE the default soul entirely.
-                prompt = `## 🚀 SYSTEM BOOT — FIRST RUN SEQUENCE\n\n${bootstrapContent}\n\n## CRITICAL INSTRUCTIONS\n\nYou MUST use the file_write tool to update these files as you learn information:\n- USER.md — Fill in their name, timezone, and preferences\n- IDENTITY.md — Fill in your name, creature type, vibe, and emoji\n\nDo NOT just remember this information — you must WRITE it to the files so it persists across sessions.\n\nWhen a file is fully populated, it will be automatically loaded into your context on future sessions.`;
+                prompt = `## 🚀 SYSTEM BOOT — FIRST RUN SEQUENCE\n\n${bootstrapContent}\n\n## CRITICAL INSTRUCTIONS\n\nYou MUST use the file_write tool to update these files as you learn information:\n- PROFILE.json — Fill in their name, preferred name, timezone, working hours, and preferences\n- IDENTITY.md — Fill in your name, creature type, vibe, and emoji\n\nDo NOT just remember this information — you must WRITE it to the files so it persists across sessions.\n\nWhen a file is fully populated, it will be automatically loaded into your context on future sessions.`;
 
                 // 🧠 PARTIAL PROGRESS CHECK
                 // Check if we have already learned things (e.g. from crashed session or partial run)
                 const user = loadUser(workspaceRoot);
                 const identity = loadIdentity(workspaceRoot);
                 const memory = loadWorkspaceFile(workspaceRoot, 'MEMORY.md');
+                const facts = loadFacts(workspaceRoot);
+                const profileRaw = loadProfileRaw(workspaceRoot);
 
                 let additionalContext = '';
 
@@ -164,7 +322,10 @@ export function buildSystemPrompt(
                     loadedFiles.push({ name: 'IDENTITY.md', chars: identity.length, status: 'template' });
                 }
 
-                if (user && !isTemplateEmpty(user)) {
+                if (profileRaw) {
+                    additionalContext += `\n\n## Profile (Learned So Far)\n${truncateToTokens(profileRaw, 400)}`;
+                    loadedFiles.push({ name: 'PROFILE.json', chars: profileRaw.length, status: 'partial' });
+                } else if (user && !isTemplateEmpty(user)) {
                     additionalContext += `\n\n## User Info (Learned So Far)\n${user}`;
                     loadedFiles.push({ name: 'USER.md', chars: user.length, status: 'partial' });
                 } else if (user) {
@@ -178,6 +339,13 @@ export function buildSystemPrompt(
                     loadedFiles.push({ name: 'MEMORY.md', chars: memory.length, status: 'template' });
                 }
 
+                if (facts && !isFactsEmpty(facts)) {
+                    additionalContext += `\n\n## Facts (Structured)\n${truncateToTokens(facts, 600)}`;
+                    loadedFiles.push({ name: 'FACTS.json', chars: facts.length, status: 'loaded' });
+                } else if (facts) {
+                    loadedFiles.push({ name: 'FACTS.json', chars: facts.length, status: 'template' });
+                }
+
                 if (additionalContext) {
                     prompt += `\n\n## ⚠️ RESUMING BOOTSTRAP\nWe have already started this process. Use the context below to pick up where we left off (don't ask questions we've already answered):\n${additionalContext}`;
                 }
@@ -185,10 +353,12 @@ export function buildSystemPrompt(
                 loadedFiles.push({ name: 'BOOTSTRAP.md', chars: 0, status: 'missing' });
             }
         } else {
-            // Normal operation: inject User and Identity context
+            // Normal operation: inject Profile + Identity context
             const user = loadUser(workspaceRoot);
             const identity = loadIdentity(workspaceRoot);
-            const memory = loadWorkspaceFile(workspaceRoot, 'MEMORY.md');
+            const facts = loadFacts(workspaceRoot);
+            const profile = loadProfile(workspaceRoot);
+            const profileRaw = loadProfileRaw(workspaceRoot);
 
             if (identity && !isTemplateEmpty(identity)) {
                 prompt += `\n\n## Your Identity\n\n${identity}`;
@@ -199,40 +369,41 @@ export function buildSystemPrompt(
                 loadedFiles.push({ name: 'IDENTITY.md', chars: 0, status: 'missing' });
             }
 
-            if (user && !isTemplateEmpty(user)) {
-                prompt += `\n\n## About the User\n\n${user}`;
-                loadedFiles.push({ name: 'USER.md', chars: user.length, status: 'loaded' });
-            } else if (user) {
-                loadedFiles.push({ name: 'USER.md', chars: user.length, status: 'template-empty' });
+            const profileSummary = buildProfileSummary(profile);
+            const defaultChannel = profile?.channels?.default;
+            if (profileSummary) {
+                prompt += `\n\n## User Profile (Structured)\n\n${profileSummary}`;
+                if (profileRaw) {
+                    loadedFiles.push({ name: 'PROFILE.json', chars: profileRaw.length, status: 'loaded' });
+                }
+            } else if (profileRaw) {
+                loadedFiles.push({ name: 'PROFILE.json', chars: profileRaw.length, status: 'template-empty' });
             } else {
-                loadedFiles.push({ name: 'USER.md', chars: 0, status: 'missing' });
+                loadedFiles.push({ name: 'PROFILE.json', chars: 0, status: 'missing' });
             }
 
-            if (memory && !isTemplateEmpty(memory)) {
-                prompt += `\n\n## Long-Term Memory (Permanent)\n\n${memory}`;
-                loadedFiles.push({ name: 'MEMORY.md', chars: memory.length, status: 'loaded' });
-            } else if (memory) {
-                loadedFiles.push({ name: 'MEMORY.md', chars: memory.length, status: 'template-empty' });
+            if (facts && !isFactsEmpty(facts)) {
+                prompt += `\n\n## Facts (Structured)\n\n${truncateToTokens(facts, 300)}`;
+                loadedFiles.push({ name: 'FACTS.json', chars: facts.length, status: 'loaded' });
+            } else if (facts) {
+                loadedFiles.push({ name: 'FACTS.json', chars: facts.length, status: 'template-empty' });
             } else {
-                loadedFiles.push({ name: 'MEMORY.md', chars: 0, status: 'missing' });
+                loadedFiles.push({ name: 'FACTS.json', chars: 0, status: 'missing' });
             }
-            
-            // Load daily memories (today + yesterday)
-            const dailyMemories = loadDailyMemories(workspaceRoot);
-            if (dailyMemories.length > 0) {
-                prompt += `\n\n## Recent Daily Notes\n\n${dailyMemories.join('\n\n---\n\n')}`;
-                loadedFiles.push({ name: 'Daily Memories', chars: dailyMemories.join('').length, status: 'loaded' });
+
+            if (defaultChannel) {
+                prompt += `\n\n## Channel Defaults\nUse "${defaultChannel}" as the default channel for proactive messages or scheduled reminders unless the user specifies otherwise.`;
             }
-            
+
             // Add proactive greeting instruction if we know the user's name
-            const userName = extractUserName(user);
-            if (userName) {
-                prompt += `\n\n## First Message Greeting\nIf this is the first message in this session, greet ${userName} casually (e.g., "Hey ${userName}! Ready to crush some goals? 🚀" or "What's good, ${userName}?"). Don't ask who they are - you already know them from the files above!`;
+            const profileName = getProfileDisplayName(profile) || extractUserName(user);
+            if (profileName) {
+                prompt += `\n\n## First Message Greeting\nIf this is the first message in this session, greet ${profileName} casually (e.g., "Hey ${profileName}! Ready to crush some goals? 🚀" or "What's good, ${profileName}?"). Don't ask who they are - you already know them from the files above!`;
             }
 
             // Add configured channels information
             const channels: string[] = [];
-            
+
             // Telegram channel status
             if (config?.channels?.telegram?.enabled && config.channels.telegram.botToken) {
                 channels.push(`✅ **Telegram** - Bot configured (@${config.channels.telegram.botToken.split(':')[0]}), ${config.channels.telegram.allowedUsers?.length || 0} allowed user(s)`);
@@ -243,7 +414,7 @@ export function buildSystemPrompt(
             } else {
                 channels.push(`❌ **Telegram** - Disabled in config.json`);
             }
-            
+
             // WhatsApp channel status (whatsapp-web.js - FREE, no Business API needed)
             if (config?.channels?.whatsapp?.enabled) {
                 const userCount = config.channels.whatsapp.allowedUsers?.length || 0;
@@ -253,12 +424,12 @@ export function buildSystemPrompt(
             } else {
                 channels.push(`❌ **WhatsApp** - Disabled in config.json`);
             }
-            
+
             // CLI channel status
             if (config?.channels?.cli?.enabled) {
                 channels.push(`✅ **CLI** - Terminal interface active`);
             }
-            
+
             if (channels.length > 0) {
                 prompt += `\n\n## 📱 Configured Communication Channels\n\n${channels.join('\n')}\n\n**CRITICAL**: When users message you via these channels, your responses are AUTOMATICALLY delivered to them on the same channel. You do NOT need any special tool or API - just respond naturally and the channel system handles delivery. The user's config already has everything needed.`;
             }
@@ -272,24 +443,24 @@ export function buildSystemPrompt(
 **⚠️ SESSION MEMORY IS TEMPORARY - WORKSPACE FILES ARE PERMANENT:**
 - Anything you learn in this conversation will be FORGOTTEN when the session ends
 - The ONLY way to remember information permanently is to write it to workspace files
-- If you learn the user's name, goals, preferences → IMMEDIATELY write to USER.md
+- If you learn the user's name, goals, preferences → IMMEDIATELY write to PROFILE.json
 - If you establish your identity → IMMEDIATELY write to IDENTITY.md
 - If you learn important facts → IMMEDIATELY write to MEMORY.md
 
 **WORKSPACE FILES ARE YOUR ONLY SOURCE OF TRUTH FOR USER IDENTITY:**
-- If USER.md is empty or contains template placeholders → you DON'T know the user yet
+- If PROFILE.json is empty or contains template placeholders → you DON'T know the user yet
 - If IDENTITY.md is empty → you haven't established your identity yet
 - If MEMORY.md is empty → you have no long-term memories yet
 
 **DO NOT confuse session history with persistent memory:**
 - Session history (previous messages in this conversation) is SHORT-TERM and will be forgotten
-- Only information written to workspace files (USER.md, IDENTITY.md, MEMORY.md) persists across sessions
+- Only information written to workspace files (PROFILE.json, IDENTITY.md, MEMORY.md) persists across sessions
 - If you see information in earlier messages but NOT in workspace files → it's NOT saved and you should NOT claim to remember it
 
 **When the user introduces themselves:**
-- If USER.md is empty → this is the FIRST TIME you're learning about them (even if they mentioned it earlier in this session)
-- You MUST IMMEDIATELY use file_write to save their information to USER.md
-- Do NOT say "I already know you" unless USER.md actually contains their information
+- If PROFILE.json is empty → this is the FIRST TIME you're learning about them (even if they mentioned it earlier in this session)
+- You MUST IMMEDIATELY use file_write to save their information to PROFILE.json
+- Do NOT say "I already know you" unless PROFILE.json actually contains their information
 - CRITICAL: Information only in session history will be LOST when the session ends - you MUST write to files to persist it
 
 ## Your Capabilities
@@ -310,59 +481,8 @@ You are an AI assistant with an iterative agent loop. You can:
 - When users ask you to "send a message to Telegram/WhatsApp", you can respond normally - the channel system automatically delivers your response to the correct platform.
 - You do NOT need a special tool to send messages - just respond naturally and the channel system handles delivery.
 
-**CRITICAL: Tool Output Format**
-All tools return structured JSON:
-\`\`\`json
-{ "success": true, "data": "...", "error": null, "meta": {...} }
-\`\`\`
-On failure:
-\`\`\`json
-{ "success": false, "data": null, "error": {"code": "...", "message": "..."}, "meta": {...} }
-\`\`\`
-**You MUST parse JSON and check the \`success\` field before using tool output.**
-
 ## Available Tools
 ${availableTools.length > 0 ? availableTools.map(t => `- ${t}`).join('\n') : '(No tools currently available)'}
-
-## Tool Categories
-
-**File & System:**
-- file_read, file_write, file_list, file_search - File operations
-- shell_execute - Run shell commands
-
-**Web & Research:**
-- web_search - Search the web (DeepSeek, OpenRouter, Tavily, DuckDuckGo)
-- web_fetch - Extract content from URLs
-
-**Memory & Knowledge:**
-- memory_read, memory_write - Persistent memory system
-- notes_save, notes_search - Save and search markdown notes
-
-**Productivity:**
-- tasks_add, tasks_list, tasks_complete - Todo list management
-- apple_notes_create, apple_notes_search - Apple Notes integration (macOS)
-- apple_reminders_add, apple_reminders_list, apple_reminders_complete - Apple Reminders (macOS)
-- apple_calendar_create_event, apple_calendar_list_events, apple_calendar_delete_event - Apple Calendar (macOS)
-
-**Apple Mail (macOS only):**
-- apple_mail_list_emails - List emails from inbox (newest first)
-- apple_mail_get_recent - Get emails from last N hours
-- apple_mail_search - Search emails by subject/sender/content
-- apple_mail_get_email_content - Read full content of a specific email
-- apple_mail_count - Count total/unread emails
-
-**Browser Automation (Safari via AppleScript - macOS only):**
-- apple_safari_navigate - Open URLs in Safari
-- apple_safari_get_info - Get current page title and URL
-- apple_safari_extract - Extract text content from pages
-- apple_safari_execute_js - Run JavaScript on the page
-- apple_safari_click - Click elements by CSS selector
-- apple_safari_type - Type text into form fields
-- apple_safari_go_back, apple_safari_reload - Navigation controls
-- apple_safari_list_tabs, apple_safari_activate_tab - Tab management
-
-**Delegation:**
-- delegate_to_subagent - Delegate specialized tasks to cheap models (research, writer, planner, critic, summarizer)
 
 ## Important Guidelines
 
@@ -430,8 +550,20 @@ ALWAYS format your response using these tags:
 - Put your complete answer inside <final> tags
 - NEVER include tool outputs or raw data in <final> - synthesize clean answers
 
+**Routing Directive (ONLY when explicitly requested):**
+- If the user explicitly asks to send a message to specific channels (e.g., "send to telegram and whatsapp"),
+  include a routing directive BEFORE <final>:
+  <route>{"channels":["telegram","whatsapp"]}</route>
+- Valid channels: telegram, whatsapp, cli, webchat
+- Do NOT include <route> unless the user clearly requested cross-channel sending
+- If the user is ambiguous about channels, ask a clarification question in <final>
+- **Do NOT ask for recipient/timing** if a default recipient is configured for that channel
+- **Assume "send now" and use the exact requested text** unless the user explicitly asked for edits or scheduling
+- When sending to external channels, your <final> should contain **only the message text** (no confirmations, no status updates, no extra commentary)
+
 **Example:**
 <think>User asked for models with 4b/8b. I found translategemma (4b, 12b, 27b) and rnj-1 (8b). I'll format this as a clean list.</think>
+<route>{"channels":["telegram","whatsapp"]}</route>
 <final>Found 2 models with 4b or 8b:
 
 • translategemma - 4b, 12b, 27b
