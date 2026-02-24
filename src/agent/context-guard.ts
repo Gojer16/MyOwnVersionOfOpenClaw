@@ -3,6 +3,7 @@
 // Adapted from openclaw - essential for long conversations
 
 import { logger } from '../utils/logger.js';
+import { estimateTokens as estimateTextTokens } from '../utils/tokens.js';
 
 // ─── Constants ────────────────────────────────────────────────────
 
@@ -42,11 +43,9 @@ export interface ContextWindowStatus {
 // ─── Token Estimation ─────────────────────────────────────────────
 
 /**
- * Estimate tokens in a string (~4 chars per token for English).
+ * Backward-compatible token estimator export for context-guard consumers.
  */
-export function estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4);
-}
+export const estimateTokens = estimateTextTokens;
 
 /**
  * Estimate tokens in a message array.
@@ -55,7 +54,7 @@ export function estimateMessagesTokens(messages: Array<{ role: string; content: 
     return messages.reduce((total, msg) => {
         // Base tokens per message (role + content structure)
         const baseTokens = 4;
-        const contentTokens = estimateTokens(msg.content);
+        const contentTokens = estimateTextTokens(msg.content);
         return total + baseTokens + contentTokens;
     }, 0);
 }
@@ -67,14 +66,20 @@ export function estimateMessagesTokens(messages: Array<{ role: string; content: 
  */
 export function resolveContextWindow(modelId: string): number {
     const normalized = modelId.toLowerCase();
-    
-    // Check for exact match or partial match
-    for (const [pattern, window] of Object.entries(MODEL_CONTEXT_WINDOWS)) {
+
+    // Sort patterns by length (longest first) to match most specific first.
+    // This prevents 'gpt-4o' from matching before 'gpt-4o-mini', or
+    // 'deepseek-chat' from matching 'deepseek-chat-v3-0324' incorrectly.
+    const sortedEntries = Object.entries(MODEL_CONTEXT_WINDOWS)
+        .filter(([key]) => key !== 'default')
+        .sort((a, b) => b[0].length - a[0].length);
+
+    for (const [pattern, window] of sortedEntries) {
         if (normalized.includes(pattern.toLowerCase())) {
             return window;
         }
     }
-    
+
     return MODEL_CONTEXT_WINDOWS.default;
 }
 
@@ -89,15 +94,15 @@ export function evaluateContextWindow(params: {
     reserveTokens?: number; // Reserve tokens for response
 }): ContextWindowStatus {
     const { modelId, messages, reserveTokens = 4000 } = params;
-    
+
     const contextWindow = resolveContextWindow(modelId);
     const usedTokens = estimateMessagesTokens(messages);
     const remainingTokens = contextWindow - usedTokens - reserveTokens;
     const usagePercent = (usedTokens / contextWindow) * 100;
-    
+
     const shouldWarn = remainingTokens < CONTEXT_WINDOW_WARN_BELOW;
     const shouldBlock = remainingTokens < CONTEXT_WINDOW_HARD_MIN;
-    
+
     return {
         contextWindow,
         usedTokens,
@@ -141,8 +146,13 @@ export function logContextWindowStatus(status: ContextWindowStatus): void {
 /**
  * Truncate messages to fit within token budget.
  * Keeps system messages and recent messages, removes oldest.
+ * 
+ * CRITICAL: Tool call/result messages are treated as atomic pairs.
+ * An assistant message with tool_calls MUST be kept together with its
+ * corresponding tool result messages. Orphaning either causes LLM errors:
+ * "messages with role 'tool' must be a response to a preceding message with 'tool_calls'"
  */
-export function truncateMessagesToFit<T extends { role: string; content: string }>(
+export function truncateMessagesToFit<T extends { role: string; content: string; tool_calls?: unknown[] }>(
     messages: T[],
     maxTokens: number,
 ): T[] {
@@ -158,21 +168,54 @@ export function truncateMessagesToFit<T extends { role: string; content: string 
 
     const systemTokens = estimateMessagesTokens(systemMessages);
 
-    // Keep recent messages that fit
+    // Group non-system messages into atomic chunks.
+    // An assistant message with tool_calls + its following tool results = one chunk.
+    const chunks: T[][] = [];
+    let i = 0;
+    while (i < nonSystemMessages.length) {
+        const msg = nonSystemMessages[i];
+
+        // Check if this is an assistant message with tool_calls
+        const hasToolCalls = msg.role === 'assistant' &&
+            Array.isArray((msg as any).tool_calls) &&
+            (msg as any).tool_calls.length > 0;
+
+        if (hasToolCalls) {
+            // Collect this assistant message + all following tool results
+            const group: T[] = [msg];
+            let j = i + 1;
+            while (j < nonSystemMessages.length && nonSystemMessages[j].role === 'tool') {
+                group.push(nonSystemMessages[j]);
+                j++;
+            }
+            chunks.push(group);
+            i = j;
+        } else {
+            chunks.push([msg]);
+            i++;
+        }
+    }
+
+    // Keep recent chunks that fit (iterate newest to oldest)
     const keptMessages: T[] = [...systemMessages];
     let currentTokens = systemTokens;
 
-    // Iterate from newest to oldest
-    for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
-        const msg = nonSystemMessages[i];
-        const msgTokens = estimateMessagesTokens([msg]);
+    for (let ci = chunks.length - 1; ci >= 0; ci--) {
+        const chunk = chunks[ci];
+        const chunkTokens = estimateMessagesTokens(chunk);
 
-        if (currentTokens + msgTokens <= maxTokens) {
-            keptMessages.unshift(msg); // Add to front to maintain order
-            currentTokens += msgTokens;
+        if (currentTokens + chunkTokens <= maxTokens) {
+            // Insert at position after system messages to maintain order
+            keptMessages.splice(systemMessages.length, 0, ...chunk);
+            currentTokens += chunkTokens;
         } else {
             break;
         }
+    }
+
+    const dropped = messages.length - keptMessages.length;
+    if (dropped > 0) {
+        logger.info({ dropped, kept: keptMessages.length, maxTokens }, 'Truncated messages to fit context window');
     }
 
     return keptMessages;
