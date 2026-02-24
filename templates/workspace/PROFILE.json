@@ -1,0 +1,33 @@
+{
+  "_comment": "TEMPLATE - Copy to ~/.talon/workspace/PROFILE.json and personalize",
+  "_warning": "This file contains personal data - NEVER commit to git!",
+  "name": "",
+  "preferredName": "",
+  "timezone": "",
+  "language": "",
+  "tone": "",
+  "location": {
+    "city": "",
+    "country": ""
+  },
+  "workingHours": {
+    "mon": "",
+    "tue": "",
+    "wed": "",
+    "thu": "",
+    "fri": "",
+    "sat": "",
+    "sun": ""
+  },
+  "preferredTools": {
+    "notes": "",
+    "tasks": "",
+    "calendar": "",
+    "email": ""
+  },
+  "channels": {
+    "default": "",
+    "enabled": []
+  },
+  "notes": ""
+}
