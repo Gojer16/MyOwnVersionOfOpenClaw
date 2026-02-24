@@ -20,6 +20,10 @@ import { TelegramChannel } from '../channels/telegram/index.js';
 import { WhatsAppChannel } from '../channels/whatsapp/index.js';
 import { registerGateway, unregisterGateway } from './process-manager.js';
 import { logger } from '../utils/logger.js';
+import { extractRouteDirective } from '../utils/route-directive.js';
+import { cronService } from '../cron/index.js';
+import { CronJobStore } from '../cron/store.js';
+import { createCronExecutor } from '../cron/executor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKSPACE_TEMPLATE = path.resolve(__dirname, '../../templates/workspace');
@@ -68,7 +72,10 @@ async function boot(): Promise<void> {
         maxContextTokens: 6000,
         maxSummaryTokens: 800,
         keepRecentMessages: config.memory.compaction.keepRecentMessages,
+        recall: config.memory.recall,
+        workspaceTemplateDir: WORKSPACE_TEMPLATE,
     });
+    await memoryManager.ensureWorkspaceReady();
     const memoryCompressor = new MemoryCompressor(modelRouter);
     const agentLoop = new AgentLoop(modelRouter, memoryManager, memoryCompressor, eventBus, {
         maxIterations: config.agent.maxIterations,
@@ -94,7 +101,6 @@ async function boot(): Promise<void> {
     subagentRegistry.register('summarizer', new SummarizerSubagent(subagentModel, modelRouter));
 
     agentLoop.registerTool(createSubagentTool(subagentRegistry));
-    agentLoop.setSubagentRegistry(subagentRegistry);
 
     logger.info({ model: subagentModel }, 'Subagents initialized');
 
@@ -110,6 +116,24 @@ async function boot(): Promise<void> {
 
     // 4. Create server (with agent loop reference)
     const server = new TalonServer(config, eventBus, sessionManager, router, agentLoop);
+
+    // 4b. Start cron service and load jobs
+    const cronStore = new CronJobStore(config.workspace.root);
+    const cronJobs = cronStore.loadJobs();
+    if (cronJobs.length > 0) {
+        cronService.loadJobs(cronJobs);
+    }
+    const cronExecutor = createCronExecutor(agentLoop, sessionManager, eventBus, config);
+    cronService.on('executeCommand', async (job) => {
+        await cronExecutor(job);
+    });
+    const persistCron = () => cronStore.save(cronService.getAllJobs());
+    cronService.on('jobAdded', persistCron);
+    cronService.on('jobRemoved', persistCron);
+    cronService.on('jobStatusChanged', persistCron);
+    cronService.on('jobCompleted', persistCron);
+    cronService.on('jobFailed', persistCron);
+    cronService.start();
 
     // Register gateway process
     registerGateway('0.3.3');
@@ -148,15 +172,17 @@ async function boot(): Promise<void> {
                     // Get the last assistant message from session
                     const lastMsg = session.messages.filter(m => m.role === 'assistant').pop();
                     const responseText = lastMsg?.content || 'Done — tools executed successfully.';
+                    const { channels: routeChannels, cleanedText } = extractRouteDirective(responseText);
 
                     // Build outbound message with usage metadata
                     const outbound = {
                         sessionId,
-                        text: responseText,
+                        text: cleanedText,
                         metadata: {
                             usage: chunk.usage,
                             provider: chunk.providerId,
                             model: chunk.model,
+                            routeChannels: routeChannels ?? undefined,
                         },
                     };
 
@@ -301,15 +327,78 @@ async function boot(): Promise<void> {
             return;
         }
 
-        // Route to the channel that originated this session
-        for (const channel of channels) {
-            if (channel.name === session.channel) {
-                try {
-                    await channel.send(sessionId, message);
-                } catch (err) {
-                    logger.error({ err, channel: channel.name, sessionId }, 'Failed to send outbound message');
+        const normalizeChannelName = (name: string): string => {
+            if (name === 'tui') return 'cli';
+            return name;
+        };
+
+        const baseChannel = normalizeChannelName(session.channel);
+        const extraChannels = message.metadata?.routeChannels?.map(normalizeChannelName) ?? [];
+        const targetChannels = extraChannels.length > 0
+            ? Array.from(new Set([baseChannel, ...extraChannels]))
+            : [baseChannel];
+
+        const isBroadcast = extraChannels.length > 0;
+        const prettyChannelName = (name: string): string => {
+            if (name === 'cli') return 'TUI';
+            if (name === 'webchat') return 'Web';
+            return name.charAt(0).toUpperCase() + name.slice(1);
+        };
+        const broadcastTargets = extraChannels.length > 0 ? extraChannels : [];
+        const confirmationText = broadcastTargets.length > 0
+            ? `Sent to ${broadcastTargets.map(prettyChannelName).join(' and ')}.`
+            : 'Sent.';
+
+        for (const target of targetChannels) {
+            const channel = channels.find(c => c.name === target);
+            if (!channel) {
+                logger.warn({ target, sessionId }, 'Requested outbound channel not available');
+                continue;
+            }
+
+            let targetSessionId = sessionId;
+            if (target !== session.channel) {
+                let senderId: string | null = null;
+                let senderName: string | undefined;
+
+                if (target === 'telegram') {
+                    senderId = config.channels.telegram.allowedUsers?.[0] ?? null;
+                    senderName = 'Telegram User';
+                } else if (target === 'whatsapp') {
+                    senderId = config.channels.whatsapp?.allowedUsers?.[0] ?? null;
+                    senderName = 'WhatsApp User';
+                } else if (target === 'webchat') {
+                    senderId = null;
+                } else if (target === 'cli') {
+                    senderId = session.senderId;
                 }
-                break;
+
+                if (target === 'whatsapp' && senderId) {
+                    const digitsOnly = senderId.replace(/[^\d]/g, '');
+                    senderId = digitsOnly ? `${digitsOnly}@c.us` : senderId;
+                }
+
+                if (!senderId) {
+                    logger.warn({ target, sessionId }, 'No default recipient configured for target channel');
+                    continue;
+                }
+
+                const existing = sessionManager.getSessionBySender(senderId);
+                const targetSession = existing?.channel === target
+                    ? existing
+                    : sessionManager.createSession(senderId, target, senderName);
+
+                targetSessionId = targetSession.id;
+            }
+
+            const outboundMessage = (isBroadcast && target === baseChannel && baseChannel === 'cli')
+                ? { ...message, text: confirmationText }
+                : message;
+
+            try {
+                await channel.send(targetSessionId, outboundMessage);
+            } catch (err) {
+                logger.error({ err, channel: channel.name, sessionId }, 'Failed to send outbound message');
             }
         }
     });
