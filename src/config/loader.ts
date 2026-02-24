@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { TalonConfigSchema, type TalonConfig } from './schema.js';
 import { ConfigError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
@@ -112,11 +113,13 @@ export function ensureWorkspaceDefaults(sourceDir: string): void {
     const defaults = [
         { file: 'SOUL.md', description: 'AI personality and soul' },
         { file: 'USER.md', description: 'Information about you' },
+        { file: 'PROFILE.json', description: 'Structured user profile' },
         { file: 'TOOLS.md', description: 'Environment-specific tool notes' },
         { file: 'IDENTITY.md', description: "Agent's self-chosen identity" },
         { file: 'BOOTSTRAP.md', description: 'First-run onboarding ritual' },
         { file: 'AGENTS.md', description: 'Operating manual' },
         { file: 'MEMORY.md', description: 'Long-term curated memory' },
+        { file: 'cron.json', description: 'Scheduled jobs' },
         { file: 'HEARTBEAT.md', description: 'Heartbeat poll checklist' },
         { file: 'FACTS.json', description: 'Structured facts about you' },
     ];
@@ -200,8 +203,16 @@ export async function loadConfig(workspaceTemplateDir?: string): Promise<TalonCo
     }
 
     // Copy workspace template files
-    if (workspaceTemplateDir) {
-        ensureWorkspaceDefaults(workspaceTemplateDir);
+    let templateDir = workspaceTemplateDir;
+    if (!templateDir) {
+        const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+        const fallback = path.resolve(moduleDir, '../../templates/workspace');
+        if (fs.existsSync(fallback)) {
+            templateDir = fallback;
+        }
+    }
+    if (templateDir) {
+        ensureWorkspaceDefaults(templateDir);
     }
 
     return result.data;
