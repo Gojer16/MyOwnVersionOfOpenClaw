@@ -8,6 +8,8 @@ import os from 'node:os';
 import type { Session } from '../../utils/types.js';
 import { TALON_HOME } from '../../config/index.js';
 import { formatAlignedColumns, formatSectionHeader, formatDivider } from './utils.js';
+import { cronService } from '../../cron/index.js';
+import { CronJobStore } from '../../cron/store.js';
 
 export type ParsedCommand = {
     name: string;
@@ -27,6 +29,7 @@ export interface CommandContext {
     config?: TalonConfigSummary;
     logLevel?: string;
     setLogLevel?: (level: string) => void;
+    prompt?: (question: string) => Promise<string>;
 }
 
 export interface TalonConfigSummary {
@@ -387,6 +390,7 @@ export function createBuiltinCommands(): CommandRegistry {
                 'MEMORY.md',
                 'SOUL.md', 
                 'USER.md',
+                'PROFILE.json',
                 'IDENTITY.md',
                 'FACTS.json',
             ];
@@ -423,6 +427,260 @@ export function createBuiltinCommands(): CommandRegistry {
                     'Use /reset to clear session history.',
                 ].join('\n'),
             };
+        },
+    });
+
+    // ── Cron command ───────────────────────────────────────────────
+    registry.register({
+        name: 'cron',
+        description: 'List/add/remove scheduled cron jobs',
+        category: 'System',
+        handler: async (args, _session, context) => {
+            const sub = args.split(/\s+/).filter(Boolean);
+            const action = sub[0] ?? 'list';
+            const workspaceRoot = context?.config?.workspace ?? path.join(TALON_HOME, 'workspace');
+            const store = new CronJobStore(workspaceRoot);
+
+            if (action === 'list') {
+                const jobs = cronService.getAllJobs();
+                if (jobs.length === 0) {
+                    return {
+                        type: 'info',
+                        message: '🕒 Cron Jobs\n\nNo jobs scheduled. Use `/cron add` to create one.',
+                    };
+                }
+
+                const lines = jobs.map(j => {
+                    const status = j.enabled ? '✅' : '⏸️';
+                    const next = j.nextRun ? new Date(j.nextRun).toLocaleString() : 'n/a';
+                    return `  • ${status} ${j.id} — ${j.name} (${j.schedule}) next: ${next}`;
+                });
+
+                return {
+                    type: 'info',
+                    message: ['🕒 Cron Jobs', '────────────────', ...lines].join('\n'),
+                };
+            }
+
+            if (action === 'show') {
+                const id = sub[1];
+                if (!id) {
+                    return { type: 'error', message: 'Usage: /cron show <jobId>' };
+                }
+                const job = cronService.getJob(id);
+                if (!job) {
+                    return { type: 'error', message: `Job not found: ${id}` };
+                }
+                const actions = (job.actions ?? []).map((a, i) => {
+                    if (a.type === 'agent') {
+                        return `  ${i + 1}) agent — ${a.prompt}`;
+                    }
+                    if (a.type === 'tool') {
+                        return `  ${i + 1}) tool — ${a.tool} ${JSON.stringify(a.args ?? {})} (sendOutput: ${a.sendOutput ? 'yes' : 'no'})`;
+                    }
+                    return `  ${i + 1}) message — ${a.text}`;
+                });
+                return {
+                    type: 'info',
+                    message: [
+                        `🕒 Cron Job: ${job.id}`,
+                        '────────────────',
+                        `  Name:      ${job.name}`,
+                        `  Schedule:  ${job.schedule}`,
+                        `  Enabled:   ${job.enabled ? 'yes' : 'no'}`,
+                        `  Next Run:  ${job.nextRun ? new Date(job.nextRun).toLocaleString() : 'n/a'}`,
+                        `  Last Run:  ${job.lastRun ? new Date(job.lastRun).toLocaleString() : 'n/a'}`,
+                        `  Runs:      ${job.runCount}`,
+                        `  Failures:  ${job.failCount}`,
+                        '  Actions:',
+                        ...(actions.length > 0 ? actions : ['  (none)']),
+                    ].join('\n'),
+                };
+            }
+
+            if (action === 'enable' || action === 'disable') {
+                const id = sub[1];
+                if (!id) {
+                    return { type: 'error', message: `Usage: /cron ${action} <jobId>` };
+                }
+                const job = cronService.getJob(id);
+                if (!job) {
+                    return { type: 'error', message: `Job not found: ${id}` };
+                }
+                const enabled = action === 'enable';
+                cronService.setEnabled(id, enabled);
+                store.save(cronService.getAllJobs());
+                return { type: 'success', message: `Cron job ${id} ${enabled ? 'enabled' : 'disabled'}.` };
+            }
+
+            if (action === 'remove') {
+                const id = sub[1];
+                if (!id) {
+                    return { type: 'error', message: 'Usage: /cron remove <jobId>' };
+                }
+                const removed = cronService.removeJob(id);
+                if (!removed) {
+                    return { type: 'error', message: `Job not found: ${id}` };
+                }
+                store.save(cronService.getAllJobs());
+                return { type: 'success', message: `Removed cron job ${id}` };
+            }
+
+            if (action === 'edit') {
+                const id = sub[1];
+                if (!id) {
+                    return { type: 'error', message: 'Usage: /cron edit <jobId>' };
+                }
+                if (!context?.prompt) {
+                    return { type: 'error', message: 'Interactive prompt not available in this mode.' };
+                }
+
+                const job = cronService.getJob(id);
+                if (!job) {
+                    return { type: 'error', message: `Job not found: ${id}` };
+                }
+
+                const field = (await context.prompt('Edit field:\n  1) name\n  2) schedule\n  3) enabled\n  4) action\nChoose (1-4): ')).trim();
+                const fieldMap: Record<string, string> = {
+                    '1': 'name',
+                    '2': 'schedule',
+                    '3': 'enabled',
+                    '4': 'action',
+                };
+                const selectedField = fieldMap[field] ?? field.toLowerCase();
+
+                if (selectedField === 'name') {
+                    const name = await context.prompt(`Name [${job.name}]: `);
+                    if (name.trim()) job.name = name.trim();
+                } else if (selectedField === 'schedule') {
+                    const schedule = await context.prompt(`Schedule [${job.schedule}]: `);
+                    if (schedule.trim()) {
+                        job.schedule = schedule.trim();
+                        cronService.setEnabled(job.id, job.enabled);
+                    }
+                } else if (selectedField === 'enabled') {
+                    const enabledRaw = await context.prompt(`Enabled (y/n) [${job.enabled ? 'y' : 'n'}]: `);
+                    const enabled = ['y', 'yes'].includes(enabledRaw.toLowerCase());
+                    cronService.setEnabled(job.id, enabled);
+                } else if (selectedField === 'action') {
+                    const actionLines = (job.actions ?? []).map((a, i) => {
+                        if (a.type === 'agent') return `  ${i + 1}) agent — ${a.prompt.slice(0, 60)}`;
+                        if (a.type === 'tool') return `  ${i + 1}) tool — ${a.tool}`;
+                        return `  ${i + 1}) message — ${a.text.slice(0, 60)}`;
+                    });
+                    const indexRaw = await context.prompt(`Select action:\n${actionLines.join('\n')}\nChoose (1-${actionLines.length}): `);
+                    const index = Math.max(1, parseInt(indexRaw, 10)) - 1;
+                    const actionItem = job.actions?.[index];
+                    if (!actionItem) {
+                        return { type: 'error', message: 'Invalid action index.' };
+                    }
+
+                    if (actionItem.type === 'agent') {
+                        const promptText = await context.prompt('Agent prompt (blank = keep): ');
+                        const channel = await context.prompt('Channel (blank = keep): ');
+                        if (promptText.trim()) actionItem.prompt = promptText.trim();
+                        if (channel.trim()) actionItem.channel = channel.trim();
+                    } else if (actionItem.type === 'tool') {
+                        const tool = await context.prompt(`Tool name [${actionItem.tool}]: `);
+                        const argsJson = await context.prompt('Tool args JSON (blank = keep): ');
+                        const sendOutputRaw = await context.prompt(`Send output? (y/n) [${actionItem.sendOutput ? 'y' : 'n'}]: `);
+                        const channel = await context.prompt('Channel (blank = keep): ');
+
+                        if (tool.trim()) actionItem.tool = tool.trim();
+                        if (argsJson.trim()) {
+                            try {
+                                actionItem.args = JSON.parse(argsJson);
+                            } catch {
+                                return { type: 'error', message: 'Invalid JSON for tool args.' };
+                            }
+                        }
+                        if (sendOutputRaw.trim()) {
+                            actionItem.sendOutput = ['y', 'yes'].includes(sendOutputRaw.toLowerCase());
+                        }
+                        if (channel.trim()) actionItem.channel = channel.trim();
+                    } else if (actionItem.type === 'message') {
+                        const text = await context.prompt('Message text (blank = keep): ');
+                        const channel = await context.prompt('Channel (blank = keep): ');
+                        if (text.trim()) actionItem.text = text.trim();
+                        if (channel.trim()) actionItem.channel = channel.trim();
+                    }
+                } else {
+                    return { type: 'error', message: 'Unknown field. Use name/schedule/enabled/action.' };
+                }
+
+                store.save(cronService.getAllJobs());
+                return { type: 'success', message: `Updated cron job ${job.id}` };
+            }
+
+            if (action === 'add') {
+                if (!context?.prompt) {
+                    return { type: 'error', message: 'Interactive prompt not available in this mode.' };
+                }
+
+                const name = await context.prompt('Job name: ');
+                const schedule = await context.prompt('Cron schedule (e.g., "0 6 * * *"): ');
+                const type = (await context.prompt('Action type (agent/tool/message): ')).toLowerCase();
+                const channel = await context.prompt('Channel (blank = default from profile): ');
+
+                let actions: any[] = [];
+
+                if (type === 'agent') {
+                    const prompt = await context.prompt('Prompt for agent: ');
+                    actions = [{
+                        type: 'agent',
+                        prompt,
+                        channel: channel || undefined,
+                    }];
+                } else if (type === 'tool') {
+                    const tool = await context.prompt('Tool name: ');
+                    const argsJson = await context.prompt('Tool args JSON (blank = {}): ');
+                    const sendOutputRaw = await context.prompt('Send tool output? (y/n): ');
+                    let argsParsed: Record<string, unknown> = {};
+                    if (argsJson.trim()) {
+                        try {
+                            argsParsed = JSON.parse(argsJson);
+                        } catch {
+                            return { type: 'error', message: 'Invalid JSON for tool args.' };
+                        }
+                    }
+                    const sendOutput = ['y', 'yes'].includes(sendOutputRaw.toLowerCase());
+                    actions = [{
+                        type: 'tool',
+                        tool,
+                        args: argsParsed,
+                        sendOutput,
+                        channel: channel || undefined,
+                    }];
+                } else if (type === 'message') {
+                    const text = await context.prompt('Message text: ');
+                    actions = [{
+                        type: 'message',
+                        text,
+                        channel: channel || undefined,
+                    }];
+                } else {
+                    return { type: 'error', message: 'Unknown action type. Use agent/tool/message.' };
+                }
+
+                const job = cronService.addJob({
+                    name: name || 'Cron Job',
+                    schedule,
+                    command: undefined,
+                    args: [],
+                    actions,
+                    enabled: true,
+                    timeout: 60000,
+                    retryCount: 1,
+                });
+
+                store.save(cronService.getAllJobs());
+                return {
+                    type: 'success',
+                    message: `Created cron job ${job.id} (${job.schedule})`,
+                };
+            }
+
+            return { type: 'error', message: 'Usage: /cron [list|add|edit|show|enable|disable|remove]' };
         },
     });
 
