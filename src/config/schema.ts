@@ -175,6 +175,11 @@ const MemorySchema = z.object({
     enabled: z.boolean().default(true),
     autoExtractFacts: z.boolean().default(true),
     factDecayDays: z.number().int().default(90),
+    recall: z.object({
+        maxResults: z.number().int().min(1).max(50).default(6),
+        maxTokens: z.number().int().min(50).max(2000).default(500),
+        includeDaily: z.boolean().default(true),
+    }).default({}),
     session: SessionMemorySchema.default({}),
     compaction: CompactionSchema.default({}),
 });
@@ -235,6 +240,7 @@ const WorkspaceSchema = z.object({
     root: z.string().default('~/.talon/workspace'),
     soulFile: z.string().default('SOUL.md'),
     factsFile: z.string().default('FACTS.json'),
+    profileFile: z.string().default('PROFILE.json'),
     skillsDir: z.string().default('skills'),
 });
 
