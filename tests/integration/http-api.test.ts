@@ -99,6 +99,16 @@ describe('TalonServer HTTP API', () => {
     });
 
     describe('Health Endpoints', () => {
+        it('should serve a usable dashboard entrypoint at root', async () => {
+            const response = await fetch(`${baseUrl}/`);
+            const html = await response.text();
+
+            expect(response.status).toBe(200);
+            expect(response.headers.get('content-type')).toContain('text/html');
+            expect(html).toContain('Talon WebChat');
+            expect(html).not.toContain('/src/main.tsx');
+        });
+
         it('should return health status', async () => {
             const response = await fetch(`${baseUrl}/api/health`);
             const data = await response.json();

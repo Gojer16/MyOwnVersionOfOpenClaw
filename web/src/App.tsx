@@ -5,7 +5,9 @@ import './App.css'
 export default function App() {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const { connected, messages, sendMessage, reset } = useWebSocket('ws://localhost:19789/ws')
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${wsProtocol}//${window.location.host}/ws`
+  const { connected, messages, sendMessage, reset } = useWebSocket(wsUrl)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -60,6 +62,12 @@ export default function App() {
             </div>
             <div className="message-content">
               {msg.content}
+              {msg.role === 'assistant' && msg.thought && (
+                <details className="thought-block">
+                  <summary>Show reasoning</summary>
+                  <div className="thought-content">{msg.thought}</div>
+                </details>
+              )}
             </div>
           </div>
         ))}

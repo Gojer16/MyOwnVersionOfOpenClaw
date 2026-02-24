@@ -5,6 +5,29 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  thought?: string
+}
+
+function parseAssistantContent(raw: string): { content: string; thought?: string } {
+  const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i)
+  const finalMatch = raw.match(/<final>([\s\S]*?)<\/final>/i)
+
+  const thought = thinkMatch?.[1]?.trim()
+  const final = finalMatch?.[1]?.trim()
+
+  if (final) {
+    return { content: final, thought }
+  }
+
+  const contentWithoutTags = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<final>[\s\S]*?<\/final>/gi, '')
+    .trim()
+
+  return {
+    content: contentWithoutTags || raw,
+    thought,
+  }
 }
 
 export function useWebSocket(url: string) {
@@ -37,31 +60,54 @@ export function useWebSocket(url: string) {
         setMessages(prev => {
           const last = prev[prev.length - 1]
           if (last && last.role === 'assistant' && last.id === msg.payload.sessionId) {
+            const parsed = parseAssistantContent(last.content + msg.payload.delta)
             return [...prev.slice(0, -1), {
               ...last,
-              content: last.content + msg.payload.delta
+              content: parsed.content,
+              thought: parsed.thought
             }]
           } else {
+            const parsed = parseAssistantContent(msg.payload.delta)
             return [...prev, {
               id: msg.payload.sessionId,
               role: 'assistant',
-              content: msg.payload.delta,
-              timestamp: Date.now()
+              content: parsed.content,
+              timestamp: Date.now(),
+              thought: parsed.thought
             }]
           }
         })
       } else if (msg.type === 'session.message.final') {
-        // Update final message
+        // Update final message; if no streaming delta arrived, append as new assistant message
         setMessages(prev => {
+          const parsed = parseAssistantContent(msg.payload.message.content)
           const last = prev[prev.length - 1]
           if (last && last.role === 'assistant') {
             return [...prev.slice(0, -1), {
               ...last,
-              content: msg.payload.message.content
+              content: parsed.content,
+              thought: parsed.thought
             }]
           }
-          return prev
+          return [...prev, {
+            id: msg.payload.sessionId,
+            role: 'assistant',
+            content: parsed.content,
+            timestamp: Date.now(),
+            thought: parsed.thought
+          }]
         })
+      } else if (msg.type === 'agent.response') {
+        const content = msg.payload?.content ?? ''
+        if (!content) return
+        const parsed = parseAssistantContent(content)
+        setMessages(prev => [...prev, {
+          id: msg.id ?? Math.random().toString(36),
+          role: 'assistant',
+          content: parsed.content,
+          timestamp: Date.now(),
+          thought: parsed.thought
+        }])
       }
     }
 

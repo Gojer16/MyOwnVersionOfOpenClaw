@@ -229,6 +229,34 @@ describe('WebSocket Protocol', () => {
 
             ws.close();
         });
+
+        it('should deliver outbound messages as session.message.final to bound websocket clients', async () => {
+            const ws = new WebSocket(wsUrl);
+            await new Promise(resolve => ws.once('open', resolve));
+
+            sendMessage(ws, 'session.create', {
+                senderId: 'test-user',
+                channel: 'webchat',
+                senderName: 'Test User',
+            });
+            const createResponse = await waitForMessage(ws, 'session.created');
+            const sessionId = createResponse.payload.sessionId as string;
+
+            eventBus.emit('message.outbound', {
+                sessionId,
+                message: {
+                    sessionId,
+                    text: 'Hello from outbound',
+                },
+            });
+
+            const finalMessage = await waitForMessage(ws, 'session.message.final');
+            expect(finalMessage.payload.sessionId).toBe(sessionId);
+            expect(finalMessage.payload.message.role).toBe('assistant');
+            expect(finalMessage.payload.message.content).toBe('Hello from outbound');
+
+            ws.close();
+        });
     });
 
     describe('Tool Events', () => {

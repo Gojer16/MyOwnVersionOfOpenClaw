@@ -6,6 +6,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import { WebSocketServer, WebSocket } from 'ws';
 import { nanoid } from 'nanoid';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { TalonConfig } from '../config/schema.js';
@@ -22,6 +23,7 @@ export class TalonServer {
     private fastify = Fastify({ logger: false });
     private wss!: WebSocketServer;
     private clients = new Map<string, WSClient>();
+    private outboundListenerBound = false;
 
     constructor(
         private config: TalonConfig,
@@ -63,16 +65,21 @@ export class TalonServer {
             origin: this.config.gateway.cors.origins,
         });
 
-        // Serve static files (web UI)
-        const webDir = path.join(__dirname, '../../web');
-        try {
+        // Serve web UI: prefer built assets, otherwise serve a minimal fallback page.
+        const builtWebDir = path.join(__dirname, '../../dist/web');
+        const builtIndex = path.join(builtWebDir, 'index.html');
+        if (fs.existsSync(builtIndex)) {
             await this.fastify.register(fastifyStatic, {
-                root: webDir,
-                prefix: '/'
+                root: builtWebDir,
+                prefix: '/',
             });
-            logger.info({ webDir }, 'Serving web UI');
-        } catch (err) {
-            logger.warn({ err }, 'Web UI not available (run: cd web && npm run build)');
+            logger.info({ builtWebDir }, 'Serving built web UI');
+        } else {
+            this.fastify.get('/', async (_request, reply) => {
+                reply.type('text/html; charset=utf-8');
+                return this.getFallbackWebChatHtml();
+            });
+            logger.warn({ builtWebDir }, 'Built web UI not found, serving fallback WebChat page');
         }
 
         // HTTP routes
@@ -91,9 +98,130 @@ export class TalonServer {
         });
 
         this.setupWebSocket();
+        this.setupEventBridge();
 
         logger.info(`Talon Gateway listening on ${address}`);
         logger.info(`WebSocket available at ws://${this.config.gateway.host}:${this.config.gateway.port}/ws`);
+    }
+
+    private setupEventBridge(): void {
+        if (this.outboundListenerBound) return;
+
+        this.eventBus.on('message.outbound', ({ message, sessionId }) => {
+            this.broadcastToSession(sessionId, {
+                id: nanoid(),
+                type: 'session.message.final',
+                timestamp: Date.now(),
+                payload: {
+                    sessionId,
+                    message: {
+                        role: 'assistant',
+                        content: message.text,
+                        timestamp: Date.now(),
+                    },
+                    usage: message.metadata?.usage,
+                    model: message.metadata?.model,
+                },
+            });
+        });
+
+        this.outboundListenerBound = true;
+    }
+
+    private getFallbackWebChatHtml(): string {
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Talon WebChat</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f8fb; margin: 0; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .card { background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: 12px; min-height: 420px; max-height: 62vh; overflow: auto; }
+    .msg { margin: 8px 0; padding: 8px 10px; border-radius: 10px; white-space: pre-wrap; }
+    .user { background: #e8f1ff; margin-left: 18%; }
+    .assistant { background: #eefbf0; margin-right: 18%; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    input { flex: 1; padding: 10px; border: 1px solid #d0d5dd; border-radius: 8px; }
+    button { padding: 10px 14px; border: 0; border-radius: 8px; background: #0b65d8; color: #fff; }
+    .muted { color: #667085; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h2 style="margin: 0;">Talon WebChat</h2>
+      <div id="status" class="muted">Connecting...</div>
+    </div>
+    <div id="messages" class="card"></div>
+    <form id="form" class="row">
+      <input id="text" type="text" placeholder="Type a message..." />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+  <script>
+    const statusEl = document.getElementById('status');
+    const messagesEl = document.getElementById('messages');
+    const formEl = document.getElementById('form');
+    const textEl = document.getElementById('text');
+    let sessionId = null;
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(wsProtocol + '//' + window.location.host + '/ws');
+
+    function appendMessage(role, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    ws.onopen = () => {
+      statusEl.textContent = 'Connected';
+      ws.send(JSON.stringify({
+        id: Math.random().toString(36).slice(2),
+        type: 'session.create',
+        timestamp: Date.now(),
+        payload: { senderId: 'web-user', channel: 'webchat', senderName: 'Web User' }
+      }));
+    };
+
+    ws.onclose = () => { statusEl.textContent = 'Disconnected'; };
+    ws.onerror = () => { statusEl.textContent = 'Connection error'; };
+
+    ws.onmessage = (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      if (msg.type === 'session.created') {
+        sessionId = msg.payload.sessionId;
+      } else if (msg.type === 'session.message.final') {
+        appendMessage('assistant', msg.payload.message.content || '');
+      } else if (msg.type === 'agent.response') {
+        appendMessage('assistant', msg.payload.content || '');
+      } else if (msg.type === 'session.error' || msg.type === 'error') {
+        appendMessage('assistant', 'Error: ' + (msg.payload?.error || 'Unknown error'));
+      }
+    };
+
+    formEl.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = (textEl.value || '').trim();
+      if (!text || !sessionId || ws.readyState !== WebSocket.OPEN) return;
+      appendMessage('user', text);
+      ws.send(JSON.stringify({
+        id: Math.random().toString(36).slice(2),
+        type: 'session.send_message',
+        timestamp: Date.now(),
+        payload: { sessionId, text, senderName: 'Web User' }
+      }));
+      textEl.value = '';
+    });
+  </script>
+</body>
+</html>`;
     }
 
     // ─── HTTP Routes ──────────────────────────────────────────────
