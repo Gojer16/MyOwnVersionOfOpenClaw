@@ -5,6 +5,7 @@
 import { BaseChannel } from '../base.js';
 import type { OutboundMessage } from '../../utils/types.js';
 import { logger } from '../../utils/logger.js';
+import { processResponse } from '../../utils/strip-tags.js';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -15,8 +16,9 @@ let QRCodeTerminal: any;
 
 try {
     const wa = await import('whatsapp-web.js');
-    Client = wa.Client;
-    LocalAuth = wa.LocalAuth;
+    const waDefault = (wa as any).default ?? wa;
+    Client = wa.Client ?? waDefault.Client;
+    LocalAuth = wa.LocalAuth ?? waDefault.LocalAuth;
 } catch {
     logger.warn('whatsapp-web.js not installed. Run: npm install whatsapp-web.js qrcode-terminal');
 }
@@ -196,13 +198,14 @@ export class WhatsAppChannel extends BaseChannel {
             return;
         }
 
-        const chatId = session.senderId;
+        const chatId = this.normalizeChatId(session.senderId);
         if (!chatId) {
             logger.error({ sessionId }, 'No chat ID found for session');
             return;
         }
 
-        const text = this.stripMarkdown(message.text);
+        const cleanedText = processResponse(message.text);
+        const text = this.stripMarkdown(cleanedText);
         
         // CHAN-020: Split messages into chunks for WhatsApp (65536 char limit)
         const MAX_WHATSAPP_LENGTH = 65000; // Safe limit under 65536
@@ -220,6 +223,16 @@ export class WhatsAppChannel extends BaseChannel {
         if (!this.isProcessingQueue) {
             this.processMessageQueue();
         }
+    }
+
+    private normalizeChatId(rawId: string | null | undefined): string | null {
+        if (!rawId) return null;
+        if (rawId.includes('@')) return rawId;
+
+        const digitsOnly = rawId.replace(/[^\d]/g, '');
+        if (!digitsOnly) return null;
+
+        return `${digitsOnly}@c.us`;
     }
 
     private async processMessageQueue(): Promise<void> {
