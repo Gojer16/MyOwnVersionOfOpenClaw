@@ -7,8 +7,10 @@ import path from 'node:path';
 import os from 'node:os';
 import { z } from 'zod';
 import type { TalonConfig } from '../config/schema.js';
-import type { ToolDefinition } from './registry.js';
+import { ProfileSchema } from '../memory/profile.js';
+import { writeFileAtomicSync } from '../utils/fs.js';
 import { logger } from '../utils/logger.js';
+import type { ToolDefinition } from './registry.js';
 
 function getWorkspacePath(config: TalonConfig, file: string): string {
     return path.join(
@@ -25,16 +27,22 @@ function getMemoryDir(config: TalonConfig): string {
 }
 
 // Simple text-based search in memory files
+function escapeRegExp(input: string): string {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function searchMemoryFiles(query: string, config: TalonConfig, maxResults: number = 5): Promise<string[]> {
     const results: string[] = [];
     const workspaceRoot = config.workspace.root.replace(/^~/, os.homedir());
-    const searchRegex = new RegExp(query, 'i');
+    const searchRegex = new RegExp(escapeRegExp(query), 'i');
 
     const filesToSearch = [
         getWorkspacePath(config, 'MEMORY.md'),
         getWorkspacePath(config, 'SOUL.md'),
         getWorkspacePath(config, 'USER.md'),
         getWorkspacePath(config, 'IDENTITY.md'),
+        getWorkspacePath(config, 'FACTS.json'),
+        getWorkspacePath(config, 'PROFILE.json'),
     ];
 
     const memoryDir = getMemoryDir(config);
@@ -108,7 +116,7 @@ export function registerMemoryTools(config: TalonConfig): ToolDefinition[] {
                 const memoryPath = getWorkspacePath(config, 'MEMORY.md');
 
                 if (!fs.existsSync(memoryPath)) {
-                    fs.writeFileSync(memoryPath, '# MEMORY\n\nYour long-term memory.\n\n## Entries\n\n');
+                    writeFileAtomicSync(memoryPath, '# MEMORY\n\nYour long-term memory.\n\n## Entries\n\n');
                 }
 
                 const timestamp = new Date().toISOString().split('T')[0];
@@ -263,7 +271,7 @@ export function registerMemoryTools(config: TalonConfig): ToolDefinition[] {
 
                 try {
                     // Write new content
-                    fs.writeFileSync(soulPath, content, 'utf-8');
+                    writeFileAtomicSync(soulPath, content);
                     logger.warn({ 
                         newSize: content.length, 
                         oldSize: oldContent.length,
@@ -275,7 +283,7 @@ export function registerMemoryTools(config: TalonConfig): ToolDefinition[] {
                     // Attempt to restore from backup if write failed
                     if (oldContent && fs.existsSync(soulPath)) {
                         try {
-                            fs.writeFileSync(soulPath, oldContent, 'utf-8');
+                            writeFileAtomicSync(soulPath, oldContent);
                             logger.error('SOUL.md write failed, restored from backup');
                             return `Error: Failed to write SOUL.md. Original content restored from backup: ${writeError.message}`;
                         } catch (restoreError: any) {
@@ -322,6 +330,20 @@ export function registerMemoryTools(config: TalonConfig): ToolDefinition[] {
                     return 'Error: facts must be a valid JSON string.';
                 }
 
+                const FactsSchema = z.object({
+                    user: z.object({
+                        name: z.string().min(1).optional(),
+                        preferences: z.record(z.unknown()).optional(),
+                    }).optional(),
+                    environment: z.record(z.unknown()).optional(),
+                    learned_facts: z.array(z.unknown()).optional(),
+                }).passthrough();
+
+                const factsValidation = FactsSchema.safeParse(facts);
+                if (!factsValidation.success) {
+                    return `Error: Invalid facts structure: ${factsValidation.error.message}`;
+                }
+
                 const factsPath = getWorkspacePath(config, 'FACTS.json');
                 const dir = path.dirname(factsPath);
 
@@ -339,10 +361,62 @@ export function registerMemoryTools(config: TalonConfig): ToolDefinition[] {
                 }
 
                 const merged = { ...existingFacts, ...facts };
-                fs.writeFileSync(factsPath, JSON.stringify(merged, null, 2), 'utf-8');
+                writeFileAtomicSync(factsPath, JSON.stringify(merged, null, 2));
                 logger.info({ facts: Object.keys(facts) }, 'facts_update');
 
                 return `Updated facts:\n${JSON.stringify(facts, null, 2)}`;
+            },
+        },
+
+        // ── profile_update ───────────────────────────────────
+        {
+            name: 'profile_update',
+            description: 'Update user profile in PROFILE.json. Use this for name, timezone, preferences, and working hours.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    profile: {
+                        type: 'string',
+                        description: 'JSON string for PROFILE.json (must match schema)',
+                    },
+                },
+                required: ['profile'],
+            },
+            execute: async (args) => {
+                // Validate input
+                let profileStr: string;
+                try {
+                    const parsed = z.object({
+                        profile: z.string().trim().min(1, 'Profile cannot be empty'),
+                    }).parse(args);
+                    profileStr = parsed.profile;
+                } catch (error: any) {
+                    return `Error: ${error.errors?.[0]?.message || 'Invalid profile parameter'}`;
+                }
+
+                let profile: Record<string, unknown>;
+                try {
+                    profile = JSON.parse(profileStr);
+                } catch {
+                    return 'Error: profile must be a valid JSON string.';
+                }
+
+                const validation = ProfileSchema.safeParse(profile);
+                if (!validation.success) {
+                    return `Error: Invalid profile structure: ${validation.error.message}`;
+                }
+
+                const profilePath = getWorkspacePath(config, 'PROFILE.json');
+                const dir = path.dirname(profilePath);
+
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+
+                writeFileAtomicSync(profilePath, JSON.stringify(validation.data, null, 2));
+                logger.info({ name: validation.data.name }, 'profile_update');
+
+                return `Updated profile for ${validation.data.name}`;
             },
         },
     ];
