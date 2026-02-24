@@ -4,6 +4,7 @@
 import { BaseChannel } from '../base.js';
 import type { OutboundMessage } from '../../utils/types.js';
 import { logger } from '../../utils/logger.js';
+import { processResponse } from '../../utils/strip-tags.js';
 
 interface TelegramUpdate {
     update_id: number;
@@ -98,8 +99,11 @@ export class TelegramChannel extends BaseChannel {
 
         if (!token || !chatId) return;
 
+        // Clean internal tags before formatting for Telegram
+        const cleanedText = processResponse(message.text);
+
         // CHAN-018: Convert to Telegram MarkdownV2 format
-        const markdownText = this.convertToTelegramMarkdown(message.text);
+        const markdownText = this.convertToTelegramMarkdown(cleanedText);
 
         // CHAN-002: Split messages into chunks ≤ 4096 chars (Telegram limit)
         const MAX_TELEGRAM_LENGTH = 4096;
