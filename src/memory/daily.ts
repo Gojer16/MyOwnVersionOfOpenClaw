@@ -4,6 +4,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { estimateTokens, truncateToTokens } from '../utils/tokens.js';
 
 /**
  * Get paths for today and yesterday's memory files
@@ -24,9 +26,11 @@ export function getDailyMemoryPaths(workspaceRoot: string): {
     const todayDate = formatDate(today);
     const yesterdayDate = formatDate(yesterday);
     
+    const resolvedRoot = workspaceRoot.replace(/^~/, os.homedir());
+
     return {
-        today: path.join(workspaceRoot, 'memory', `${todayDate}.md`),
-        yesterday: path.join(workspaceRoot, 'memory', `${yesterdayDate}.md`),
+        today: path.join(resolvedRoot, 'memory', `${todayDate}.md`),
+        yesterday: path.join(resolvedRoot, 'memory', `${yesterdayDate}.md`),
         todayDate,
         yesterdayDate,
     };
@@ -37,43 +41,72 @@ export function getDailyMemoryPaths(workspaceRoot: string): {
  * Returns array of file contents (only for files that exist and have content)
  */
 export function loadDailyMemories(workspaceRoot: string): string[] {
+    return loadRecentDailyMemories(workspaceRoot, { maxFiles: 2, maxTotalTokens: 600 });
+}
+
+/**
+ * Load recent daily memory files (most recent N dates).
+ * Returns array of file contents in chronological order.
+ */
+export function loadRecentDailyMemories(
+    workspaceRoot: string,
+    options?: { maxFiles?: number; maxTotalTokens?: number },
+): string[] {
     const memories: string[] = [];
-    const { today, yesterday, todayDate, yesterdayDate } = getDailyMemoryPaths(workspaceRoot);
-    
+    const maxFiles = options?.maxFiles ?? 7;
+    const maxTotalTokens = options?.maxTotalTokens ?? 1200;
+
     // Ensure memory directory exists
-    const memoryDir = path.join(workspaceRoot, 'memory');
+    const memoryDir = path.join(workspaceRoot.replace(/^~/, os.homedir()), 'memory');
     if (!fs.existsSync(memoryDir)) {
         try {
             fs.mkdirSync(memoryDir, { recursive: true });
-        } catch (err) {
-            // Silently fail - directory creation is not critical
+        } catch {
+            return memories;
         }
     }
-    
-    // Load yesterday's memory first (chronological order)
+
+    let files: string[] = [];
     try {
-        if (fs.existsSync(yesterday)) {
-            const content = fs.readFileSync(yesterday, 'utf-8').trim();
-            if (content && content.length > 0) {
-                memories.push(`## Yesterday (${yesterdayDate})\n\n${content}`);
-            }
-        }
+        files = fs.readdirSync(memoryDir)
+            .filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
+            .sort();
     } catch {
-        // Silently skip if file can't be read
+        return memories;
     }
-    
-    // Load today's memory
-    try {
-        if (fs.existsSync(today)) {
-            const content = fs.readFileSync(today, 'utf-8').trim();
-            if (content && content.length > 0) {
-                memories.push(`## Today (${todayDate})\n\n${content}`);
+
+    const recentFiles = files.slice(-maxFiles);
+    let usedTokens = 0;
+
+    for (const file of recentFiles) {
+        const filePath = path.join(memoryDir, file);
+        const date = file.replace(/\.md$/, '');
+
+        try {
+            const content = fs.readFileSync(filePath, 'utf-8').trim();
+            if (!content) continue;
+
+            const header = `## ${date}\n\n`;
+            const headerTokens = estimateTokens(header);
+            const contentTokens = estimateTokens(content);
+            const totalTokens = headerTokens + contentTokens;
+
+            if (usedTokens + totalTokens > maxTotalTokens) {
+                const remaining = maxTotalTokens - usedTokens - headerTokens;
+                if (remaining <= 0) break;
+                const truncated = truncateToTokens(content, remaining);
+                memories.push(`${header}${truncated}`);
+                usedTokens = maxTotalTokens;
+                break;
             }
+
+            memories.push(`${header}${content}`);
+            usedTokens += totalTokens;
+        } catch {
+            // Skip unreadable files
         }
-    } catch {
-        // Silently skip if file can't be read
     }
-    
+
     return memories;
 }
 
