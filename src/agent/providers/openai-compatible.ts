@@ -60,6 +60,8 @@ export interface ProviderConfig {
     baseUrl: string;
     defaultModel: string;
     extraHeaders?: Record<string, string>;
+    timeoutMs?: number;
+    maxRetries?: number;
 }
 
 // ─── Provider ─────────────────────────────────────────────────────
@@ -67,6 +69,8 @@ export interface ProviderConfig {
 export class OpenAICompatibleProvider {
     private client: OpenAI;
     private defaultModel: string;
+    private timeoutMs: number;
+    private maxRetries: number;
 
     constructor(config: ProviderConfig) {
         this.client = new OpenAI({
@@ -76,6 +80,8 @@ export class OpenAICompatibleProvider {
             dangerouslyAllowBrowser: true, // Allow empty/placeholder keys
         });
         this.defaultModel = config.defaultModel;
+        this.timeoutMs = config.timeoutMs ?? 90_000;
+        this.maxRetries = config.maxRetries ?? 2;
     }
 
     /**
@@ -93,42 +99,67 @@ export class OpenAICompatibleProvider {
         const model = options?.model ?? this.defaultModel;
 
         logger.debug({ model, messageCount: messages.length }, 'LLM chat request');
+        let lastError: unknown;
 
-        const params: OpenAI.Chat.ChatCompletionCreateParams = {
-            model,
-            messages: messages as ChatCompletionMessageParam[],
-            max_tokens: options?.maxTokens ?? 4096,
-            temperature: options?.temperature ?? 0.7,
-        };
+        for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+            try {
+                const params: OpenAI.Chat.ChatCompletionCreateParams = {
+                    model,
+                    messages: messages as ChatCompletionMessageParam[],
+                    max_tokens: options?.maxTokens ?? 4096,
+                    temperature: options?.temperature ?? 0.7,
+                };
 
-        if (options?.tools && options.tools.length > 0) {
-            params.tools = options.tools as ChatCompletionTool[];
-            params.tool_choice = 'auto';
+                if (options?.tools && options.tools.length > 0) {
+                    params.tools = options.tools as ChatCompletionTool[];
+                    params.tool_choice = 'auto';
+                }
+
+                const response = await this.client.chat.completions.create(params, {
+                    timeout: this.timeoutMs,
+                });
+                const choice = response.choices[0];
+
+                const toolCalls = (choice?.message?.tool_calls ?? [])
+                    .filter((tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageToolCall & { type: 'function' } =>
+                        tc.type === 'function',
+                    )
+                    .map(tc => {
+                        let args: Record<string, unknown>;
+                        try {
+                            args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>;
+                        } catch {
+                            throw new Error(`Malformed JSON in tool call arguments for "${tc.function.name}"`);
+                        }
+
+                        return {
+                            id: tc.id,
+                            name: tc.function.name,
+                            args,
+                        };
+                    });
+
+                return {
+                    content: choice?.message?.content ?? null,
+                    toolCalls,
+                    usage: response.usage ? {
+                        promptTokens: response.usage.prompt_tokens ?? 0,
+                        completionTokens: response.usage.completion_tokens ?? 0,
+                        totalTokens: response.usage.total_tokens ?? 0,
+                    } : undefined,
+                    finishReason: choice?.finish_reason ?? null,
+                };
+            } catch (error) {
+                lastError = error;
+                const mapped = this.mapProviderError(error);
+                if (!mapped.retryable || attempt >= this.maxRetries) {
+                    throw new Error(mapped.message);
+                }
+                await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 400));
+            }
         }
 
-        const response = await this.client.chat.completions.create(params);
-        const choice = response.choices[0];
-
-        const toolCalls = (choice?.message?.tool_calls ?? [])
-            .filter((tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageToolCall & { type: 'function' } =>
-                tc.type === 'function',
-            )
-            .map(tc => ({
-                id: tc.id,
-                name: tc.function.name,
-                args: JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>,
-            }));
-
-        return {
-            content: choice?.message?.content ?? null,
-            toolCalls,
-            usage: response.usage ? {
-                promptTokens: response.usage.prompt_tokens ?? 0,
-                completionTokens: response.usage.completion_tokens ?? 0,
-                totalTokens: response.usage.total_tokens ?? 0,
-            } : undefined,
-            finishReason: choice?.finish_reason ?? null,
-        };
+        throw new Error(lastError instanceof Error ? lastError.message : 'Unknown provider error');
     }
 
     /**
@@ -227,6 +258,35 @@ export class OpenAICompatibleProvider {
             args: JSON.parse(b.args || '{}') as Record<string, unknown>,
         }));
     }
+
+    private mapProviderError(error: unknown): { message: string; retryable: boolean } {
+        const anyErr = error as { status?: number; message?: string; code?: string; name?: string };
+        const status = anyErr?.status;
+        const message = anyErr?.message ?? 'Unknown provider error';
+        const lower = message.toLowerCase();
+
+        if (status === 429 || lower.includes('rate limit') || lower.includes('too many requests')) {
+            return { message: `Rate limit error (429): ${message}`, retryable: true };
+        }
+
+        if (typeof status === 'number' && status >= 500) {
+            return { message: `Provider server error (${status}): ${message}`, retryable: true };
+        }
+
+        if (lower.includes('malformed json') || lower.includes('unexpected token')) {
+            return { message: `Malformed JSON response: ${message}`, retryable: true };
+        }
+
+        if (lower.includes('timeout') || anyErr?.name === 'AbortError' || anyErr?.code === 'ETIMEDOUT') {
+            return { message: `Provider timeout: ${message}`, retryable: true };
+        }
+
+        if (status === 401 || status === 403 || lower.includes('unauthorized') || lower.includes('api key')) {
+            return { message: `Authentication error: ${message}`, retryable: false };
+        }
+
+        return { message: `Provider error: ${message}`, retryable: false };
+    }
 }
 
 // ─── Factory Functions ────────────────────────────────────────────
@@ -261,10 +321,14 @@ export function createOpenRouterProvider(apiKey: string, model?: string): OpenAI
     });
 }
 
-export function createOpenAIProvider(apiKey: string, model?: string): OpenAICompatibleProvider {
+export function createOpenAIProvider(
+    apiKey: string,
+    model?: string,
+    baseUrl?: string,
+): OpenAICompatibleProvider {
     return new OpenAICompatibleProvider({
         apiKey,
-        baseUrl: 'https://api.openai.com/v1',
+        baseUrl: baseUrl ?? 'https://api.openai.com/v1',
         defaultModel: model ?? 'gpt-4o',
     });
 }

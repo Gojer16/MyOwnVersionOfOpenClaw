@@ -11,6 +11,7 @@ import {
     type ProviderConfig,
 } from './providers/openai-compatible.js';
 import { OpenCodeProvider, createOpenCodeProviderNoAuth } from './providers/opencode.js';
+import { LlmTaskRouter, type TaskType } from '../llm/router.js';
 import { logger } from '../utils/logger.js';
 
 // ─── Task Complexity Levels ───────────────────────────────────────
@@ -22,6 +23,7 @@ export type TaskComplexity = 'simple' | 'moderate' | 'complex' | 'summarize';
 export class ModelRouter {
     private providers = new Map<string, OpenAICompatibleProvider | OpenCodeProvider>();
     private defaultModel: string;
+    private taskRouter = new LlmTaskRouter();
 
     constructor(private config: TalonConfig) {
         this.defaultModel = config.agent.model;
@@ -33,7 +35,9 @@ export class ModelRouter {
      */
     private initializeProviders(): void {
         for (const [id, provConfig] of Object.entries(this.config.agent.providers)) {
-            const apiKey = provConfig.apiKey ?? '';
+            const apiKey = provConfig.apiKey
+                ?? (id === 'openai' ? process.env.OPENAI_API_KEY : undefined)
+                ?? '';
 
             // OpenCode doesn't require API key and uses special provider
             if (id === 'opencode') {
@@ -58,7 +62,11 @@ export class ModelRouter {
                     provider = createOpenRouterProvider(apiKey);
                     break;
                 case 'openai':
-                    provider = createOpenAIProvider(apiKey);
+                    provider = createOpenAIProvider(
+                        apiKey,
+                        provConfig.models?.[0] ?? undefined,
+                        provConfig.baseUrl ?? process.env.OPENAI_BASE_URL,
+                    );
                     break;
                 default:
                     // Custom provider
@@ -174,6 +182,32 @@ export class ModelRouter {
         providerId: string;
     } | null {
         return this.getProviderForTask('moderate');
+    }
+
+    /**
+     * Route by explicit task type (plan/code/docs) with Codex-first defaults.
+     */
+    getProviderForTaskType(taskType: TaskType): {
+        provider: OpenAICompatibleProvider | OpenCodeProvider;
+        model: string;
+        providerId: string;
+    } | null {
+        const policy = this.taskRouter.chooseRoute(taskType);
+        const provider = this.providers.get(policy.provider);
+
+        if (provider) {
+            const configuredModels = this.config.agent.providers[policy.provider]?.models ?? [];
+            const matchedModel = configuredModels.find(model => model === policy.model || model.includes(policy.model));
+
+            return {
+                provider,
+                model: matchedModel ?? policy.model,
+                providerId: policy.provider,
+            };
+        }
+
+        logger.debug({ taskType }, 'Task-type route provider unavailable, falling back to default routing');
+        return this.getDefaultProvider();
     }
 
     /**
