@@ -424,6 +424,43 @@ talon provider       # Add/change AI provider
 talon switch         # Switch between models
 talon tui            # Interactive TUI (connect to gateway)
 ```
+
+**Cron (TUI slash commands):**
+```
+/cron list                # List jobs
+/cron add                 # Interactive wizard
+/cron show <jobId>         # Full job details
+/cron edit <jobId>         # Edit job via menu
+/cron enable <jobId>       # Enable job
+/cron disable <jobId>      # Disable job
+/cron remove <jobId>       # Remove job
+```
+
+### Cron Quickstart
+
+1. Set your default channel in `~/.talon/workspace/PROFILE.json`:
+```json
+{
+  "name": "Orlando",
+  "preferredName": "Gojer",
+  "timezone": "America/New_York",
+  "channels": {
+    "default": "telegram"
+  }
+}
+```
+
+2. Create a job in the TUI:
+```
+/cron add
+```
+
+Example prompt for an agent action:
+```
+Generate my 6am routine. Include a short Russian phrase and a podcast suggestion.
+```
+
+This will run daily and send the result to your default channel.
 5. Set up your phone number for WhatsApp
 
 ---
@@ -699,6 +736,7 @@ npm start -- --port 8080 # Custom port
 - Personal data goes in `~/.talon/workspace/` (gitignored)
 - Templates in `templates/workspace/` are generic and safe
 - Each user gets their own copy of workspace files
+- Structured profile lives in `~/.talon/workspace/PROFILE.json`
 
 ---
 
@@ -726,15 +764,9 @@ npm start -- --port 8080 # Custom port
 - Plugin marketplace
 - Mobile apps
 - Enterprise features
-- Calendar integration
-- Email integration
-- SQLite memory storage
-
-### 🔮 v1.0.0 (Future)
-- Stable API
-- Plugin marketplace
-- Mobile apps
-- Enterprise features
+ - Calendar integration
+ - Email integration
+ - SQLite memory storage
 
 See [docs/08-ROADMAP.md](docs/08-ROADMAP.md) for full details.
 
